@@ -405,6 +405,7 @@ fun VideoEditorScreen(settings: ProjectSettings, template: Template?, onBack: ()
             else TextButton(onClick = { state.playing=false; showAssistant=true }) { Text("Buat Motion",color=TextHigh) }
         }
         BoxWithConstraints(Modifier.fillMaxSize()) {
+            val workspaceHeight=maxHeight
             val keyboardVisible=WindowInsets.ime.getBottom(LocalDensity.current)>0
             if (maxWidth >= 1000.dp || (maxWidth>=840.dp && maxHeight>=560.dp)) {
                 Row(Modifier.fillMaxSize()) {
@@ -434,7 +435,7 @@ fun VideoEditorScreen(settings: ProjectSettings, template: Template?, onBack: ()
                         TransportBar(state,compact=true)
                     }
                     Column(Modifier.weight(.56f).fillMaxHeight()) {
-                        if(!keyboardVisible) TimelineView(state,if(state.panel==null) Modifier.weight(1f).fillMaxWidth() else Modifier.height(minOf(112.dp,maxHeight*.24f)).fillMaxWidth()) { showAdd=true }
+                        if(!keyboardVisible) TimelineView(state,if(state.panel==null) Modifier.weight(1f).fillMaxWidth() else Modifier.height(minOf(112.dp,workspaceHeight*.24f)).fillMaxWidth()) { showAdd=true }
                         if(state.panel!=null) Box(Modifier.weight(1f)) { panelArea(Modifier.fillMaxSize()) }
                         if(!keyboardVisible) EditorToolbar(state,importing,mediaProgress,onAdd={state.addLayer(it)},onImport={startImport(intoSelected=false)},onMedia=::startMedia)
                     }
@@ -448,7 +449,7 @@ fun VideoEditorScreen(settings: ProjectSettings, template: Template?, onBack: ()
                     }
                     if(!keyboardVisible) TransportBar(state)
                     if(state.panel!=null) {
-                        if(!keyboardVisible) TimelineView(state,Modifier.height(if(largeType) minOf(132.dp,maxHeight*.18f) else 132.dp).fillMaxWidth().padding(horizontal=8.dp)) { showAdd=true }
+                        if(!keyboardVisible) TimelineView(state,Modifier.height(if(largeType) minOf(132.dp,workspaceHeight*.18f) else 132.dp).fillMaxWidth().padding(horizontal=8.dp)) { showAdd=true }
                         Box(Modifier.weight(1f).fillMaxWidth()) { panelArea(Modifier.fillMaxSize()) }
                     } else {
                         TimelineView(state,Modifier.weight(1f).fillMaxWidth().padding(horizontal=8.dp).padding(bottom=8.dp)) { showAdd=true }

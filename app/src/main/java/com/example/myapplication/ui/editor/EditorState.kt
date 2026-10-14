@@ -187,10 +187,14 @@ class EditorState(val settings: ProjectSettings, template: Template?, restored: 
     }
 
     /** Sets a value at the playhead; writes a keyframe when the property's stopwatch is on. */
-    fun setValue(key: PropKey, value: Float) = updateSelected("value-$key-$selectedId") { l ->
-        if(!value.isFinite()) return@updateSelected l
-        val tr = l.trackOf(key) ?: return@updateSelected l
-        l.withTrackOf(key, tr.withValueAt(snap(time), value))
+    fun setValue(key: PropKey, value: Float) {
+        if(!value.isFinite() || selected?.trackOf(key)==null) return
+        playing=false
+        time=snap(time)
+        updateSelected("value-$key-$selectedId") { l ->
+            val tr = l.trackOf(key) ?: return@updateSelected l
+            l.withTrackOf(key, tr.withValueAt(time, value))
+        }
     }
 
     /** After Effects' stopwatch: on records the first keyframe, off clears them and keeps the current value. */

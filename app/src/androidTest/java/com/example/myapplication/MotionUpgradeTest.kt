@@ -84,6 +84,16 @@ class MotionUpgradeTest {
         state.undo()
     }
 
+    @Test fun editingAnAnimatedValueStopsPlaybackAndUsesTheVisibleFrame() {
+        val shape=layer(1,LayerType.Shape).withTrack(Prop.PosX,Track(0f,listOf(Keyframe(0f,0f),Keyframe(1f,1f))))
+        val state=EditorState(ProjectSettings(duration=2f,fps=30),null)
+        state.commit(listOf(shape)); state.select(1); state.time=.51f; state.playing=true
+        state.setValue(PropKey.T(Prop.PosX),.75f)
+        assertFalse(state.playing)
+        assertEquals(.5f,state.time,.0001f)
+        assertEquals(.75f,state.valueOf(state.selected!!,PropKey.T(Prop.PosX)),.0001f)
+    }
+
     @Test fun solvedCameraStillRespondsToZoomAndPositionControls() {
         val solve=CameraSolve3D(listOf(CameraPose3D(0f,listOf(1f,0f,0f,0f,1f,0f,0f,0f,1f),listOf(0f,0f,0f),20)),emptyList(),.8660254f,3f,2f)
         val camera=layer(1,LayerType.Camera).copy(cameraSolve=solve)

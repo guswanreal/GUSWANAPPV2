@@ -269,15 +269,18 @@ private fun GraphCanvas(state: EditorState, layer: Layer, key: PropKey, track: T
                         down.consume(); s.playing=false; frozen=r
                         frozenTime=start to (start+spanTime)
                         val grab=down.position-handlePoint(handle)
-                        drag(down.id) { ch ->
-                            ch.consume(); val p=ch.position-grab
-                            val k=if(handle) a else b
-                            val influence=((tOf(p.x)-k.time)*(if(handle) 1 else -1)/(b.time-a.time)).coerceIn(.001f,1f)
-                            val speed=if(mode) vOf(p.y)/uiPerUnit else (vOf(p.y)-k.value)*(if(handle) 1 else -1)/(influence*(b.time-a.time))
-                            s.setBezierHandle(key,segment,handle,influence,speed)
+                        try {
+                            drag(down.id) { ch ->
+                                ch.consume(); val p=ch.position-grab
+                                val k=if(handle) a else b
+                                val influence=((tOf(p.x)-k.time)*(if(handle) 1 else -1)/(b.time-a.time)).coerceIn(.001f,1f)
+                                val speed=if(mode) vOf(p.y)/uiPerUnit else (vOf(p.y)-k.value)*(if(handle) 1 else -1)/(influence*(b.time-a.time))
+                                s.setBezierHandle(key,segment,handle,influence,speed)
+                            }
+                        } finally {
+                            frozen=null
+                            frozenTime=null
                         }
-                        frozen=null
-                        frozenTime=null
                     } else if (hit != null) {
                         down.consume()
                         s.playing=false
@@ -287,13 +290,16 @@ private fun GraphCanvas(state: EditorState, layer: Layer, key: PropKey, track: T
                         frozenTime=start to (start+spanTime)
                         val k0 = tr.keys[hit]
                         val grab = down.position - Offset(xOf(k0.time), yOf(keyValue(hit)))
-                        drag(down.id) { ch ->
-                            ch.consume()
-                            val p = ch.position - grab
-                            s.moveKey(key, hit, tOf(p.x), if(mode) k0.value else vOf(p.y))
+                        try {
+                            drag(down.id) { ch ->
+                                ch.consume()
+                                val p = ch.position - grab
+                                s.moveKey(key, hit, tOf(p.x), if(mode) k0.value else vOf(p.y))
+                            }
+                        } finally {
+                            frozen = null
+                            frozenTime=null
                         }
-                        frozen = null
-                        frozenTime=null
                     } else {
                         s.playing = false
                         s.graphKeyIndex = null
