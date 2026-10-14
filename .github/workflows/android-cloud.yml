@@ -23,6 +23,8 @@ jobs:
           java-version: '25'
           cache: gradle
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
       - name: Install compile SDK
         run: sdkmanager 'platforms;android-37' 'build-tools;36.1.0'
       - name: Build APK and unit tests
@@ -48,6 +50,8 @@ jobs:
           java-version: '25'
           cache: gradle
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
       - run: sdkmanager 'platforms;android-37' 'build-tools;36.1.0'
       - name: Enable emulator acceleration
         run: |
@@ -70,3 +74,4 @@ jobs:
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
+
