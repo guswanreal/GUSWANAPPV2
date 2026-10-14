@@ -2,6 +2,8 @@ package com.example.myapplication
 
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.*
@@ -79,6 +81,24 @@ class EditorWorkspaceUiTest {
         compose.onNodeWithTag("graph-canvas").performScrollTo().assertIsDisplayed()
         val configuration=context.resources.configuration
         compose.onNodeWithTag("graph-canvas").assertHeightIsEqualTo(if(configuration.screenWidthDp>configuration.screenHeightDp*1.35f && configuration.screenHeightDp<520) 96.dp else 180.dp)
+        val density=compose.activity.resources.displayMetrics.density
+        val fontScale=compose.activity.resources.configuration.fontScale.coerceAtLeast(1f)
+        var expectedTime=2f
+        compose.onNodeWithTag("graph-canvas").performTouchInput {
+            val left=52f*density*fontScale; val right=size.width-14f*density
+            val top=16f*density; val bottom=size.height-24f*density*fontScale
+            expectedTime=2f-10f*density/(right-left)*2.16f
+            down(Offset(left+(right-left)*2f/2.16f,top+(bottom-top)*.109375f))
+            moveBy(Offset(-5f*density,5f*density))
+            moveBy(Offset(-5f*density,5f*density))
+            up()
+        }
+        compose.onNodeWithTag("scrub-Waktu key").performScrollTo().performClick()
+        val editedTime=compose.onNode(hasSetTextAction()).fetchSemanticsNode().config[SemanticsProperties.EditableText].text.toFloat()
+        org.junit.Assert.assertTrue("Key time must follow the drag without fitted-axis jumps",kotlin.math.abs(editedTime-expectedTime)<.025f)
+        compose.onNodeWithText("Batal").performClick()
+        compose.onNodeWithTag("graph-canvas").performScrollTo()
+        android.util.Log.i("EditorUiQa","Graph key moved through two pointer samples")
         capture("graph")
         compose.onNodeWithContentDescription("Tutup panel").performClick()
         compose.mainClock.advanceTimeBy(1000)
