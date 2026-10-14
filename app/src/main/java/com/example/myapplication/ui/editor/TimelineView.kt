@@ -92,7 +92,7 @@ private class Geo(width: Float, val pxPerSec: Float, val time: Float, val scroll
  * Drag to scrub, pinch to zoom, long-press a clip to move it, drag the white handles to trim.
  */
 @Composable
-internal fun TimelineView(state: EditorState, modifier: Modifier, onAdd: () -> Unit) {
+internal fun TimelineView(state: EditorState, modifier: Modifier, compact: Boolean=false, onAdd: () -> Unit) {
     val measurer = rememberTextMeasurer()
     val haptics = LocalHapticFeedback.current
     // Every layer type, so a new type (camera, footage) can never miss its clip icon.
@@ -230,7 +230,7 @@ internal fun TimelineView(state: EditorState, modifier: Modifier, onAdd: () -> U
             }
             drawPath(cap, Accent)
         }
-        AddFab(Modifier.align(Alignment.BottomEnd).padding(12.dp), onAdd)
+        AddFab(Modifier.align(if(compact) Alignment.BottomStart else Alignment.BottomEnd).padding(if(compact) 6.dp else 12.dp),onAdd,compact)
     }
 }
 
@@ -293,13 +293,13 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawClip(
 }
 
 @Composable
-private fun AddFab(modifier: Modifier, onClick: () -> Unit) {
+private fun AddFab(modifier: Modifier, onClick: () -> Unit, compact:Boolean=false) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.9f else 1f, spring(stiffness = Spring.StiffnessMedium), label = "fab")
     Box(
         modifier
-            .size(56.dp)
+            .size(if(compact) 44.dp else 56.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .shadow(10.dp, CircleShape, ambientColor = Accent, spotColor = Accent)
             .clip(CircleShape)
@@ -308,3 +308,4 @@ private fun AddFab(modifier: Modifier, onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) { Icon(Icons.Rounded.Add, contentDescription = "Tambah layer", tint = Ink950, modifier = Modifier.size(28.dp)) }
 }
+

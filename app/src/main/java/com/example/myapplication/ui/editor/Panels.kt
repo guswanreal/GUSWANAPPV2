@@ -339,10 +339,10 @@ private fun SwitchRow(icon: ImageVector, label: String, on: Boolean, onClick: ()
 internal fun ParentPanel(state: EditorState, layer: Layer) {
     Panel(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(vertical = 6.dp)) {
+            ParentRow(null, "Tidak ada", Icons.Rounded.LinkOff, null, layer.parentId == null) { state.setParent(null) }
             PanelHint("Child mengikuti Position, Anchor, Rotation, dan Scale parent. Tampilan pada playhead tetap saat mengganti atau melepas parent.")
             PanelHint(if(layer.type==LayerType.Camera) "Kamera dapat dihubungkan ke Null. Position, Rotation dan Scale Null menggerakkan rig kamera 3D." else "Gunakan Null Object untuk menggerakkan beberapa layer bersama.")
             state.parentError?.let { Text(it, color = Danger, modifier = Modifier.padding(12.dp)) }
-            ParentRow(null, "Tidak ada", Icons.Rounded.LinkOff, null, layer.parentId == null) { state.setParent(null) }
             if(layer.parentId!=null && layer.type!=LayerType.Camera) {
                 ActionButton("Pusatkan pada parent",state::centerOnParent,primary=false,modifier=Modifier.fillMaxWidth().padding(12.dp))
             }

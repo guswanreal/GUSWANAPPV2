@@ -12,19 +12,19 @@ run_tests() {
   grep -Eq '^OK \([0-9]+ tests?\)' "work-ui/instrumentation-$label.log"
 }
 run_tests portrait || result=$?
-if [ "$result" -eq 0 ]; then
-  adb shell settings put system accelerometer_rotation 0
-  adb shell settings put system user_rotation 1
-  run_tests landscape -e class com.example.myapplication.EditorWorkspaceUiTest || result=$?
-  adb shell settings put system user_rotation 0
-  adb shell settings put system font_scale 2.0
-  run_tests large-type -e class com.example.myapplication.EditorWorkspaceUiTest || result=$?
-fi
+adb shell settings put system accelerometer_rotation 0
+adb shell settings put system user_rotation 1
+run_tests landscape -e class com.example.myapplication.EditorWorkspaceUiTest || result=$?
+adb shell settings put system user_rotation 0
+adb shell settings put system font_scale 2.0
+run_tests large-type -e class com.example.myapplication.EditorWorkspaceUiTest || result=$?
 for screen in editor graph; do
   for viewport in portrait landscape; do
     for type in default large-type; do
       name="$screen-$viewport-$type.png"
-      adb exec-out run-as "$app_id" cat "files/qa/$name" > "work-ui/$name" 2>/dev/null || rm -f "work-ui/$name"
+      if adb shell run-as "$app_id" ls "files/qa/$name" > /dev/null 2>&1; then
+        adb exec-out run-as "$app_id" cat "files/qa/$name" > "work-ui/$name"
+      fi
     done
   done
 done

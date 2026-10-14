@@ -16,6 +16,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 import com.example.myapplication.engine.*
 import com.example.myapplication.ui.components.Panel
@@ -41,8 +42,10 @@ internal fun CurveControls(state: EditorState,layer: Layer,key: PropKey,track: T
             }
             FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                 FlowCurves.forEach { curve ->
+                    var focused by remember { mutableStateOf(false) }
                     Column(Modifier.width(84.dp).clip(RoundedCornerShape(6.dp)).background(Ink950)
-                        .border(1.dp,LineStrong,RoundedCornerShape(6.dp))
+                        .border(if(focused) 2.dp else 1.dp,if(focused) TextHigh else LineStrong,RoundedCornerShape(6.dp))
+                        .onFocusChanged { focused=it.isFocused }
                         .clickable(onClickLabel="Terapkan kurva ${curve.name}") { state.applyCurve(key,if(all) null else segment,curve); state.graphKeyIndex=segment }
                         .padding(8.dp),horizontalAlignment=Alignment.CenterHorizontally) {
                         Canvas(Modifier.fillMaxWidth().height(38.dp)) {

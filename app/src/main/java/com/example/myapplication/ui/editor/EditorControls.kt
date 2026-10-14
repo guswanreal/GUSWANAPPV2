@@ -184,6 +184,7 @@ internal fun ScrubValue(
     onChange: (Float) -> Unit,
 ) {
     var editing by remember { mutableStateOf(false) }
+    var focused by remember { mutableStateOf(false) }
     val current by rememberUpdatedState(value)
     val change by rememberUpdatedState(onChange)
     val perPx = (range.endInclusive - range.start) / with(LocalDensity.current) { 280.dp.toPx() }
@@ -194,6 +195,8 @@ internal fun ScrubValue(
         maxLines = 1,
         modifier = Modifier
             .clip(RoundedCornerShape(6.dp))
+            .border(if(focused) 2.dp else 0.dp,if(focused) TextHigh else Color.Transparent,RoundedCornerShape(6.dp))
+            .onFocusChanged { focused=it.isFocused }
             .testTag("scrub-$name")
             .pointerInput(range) {
                 detectHorizontalDragGestures { ch, dx ->

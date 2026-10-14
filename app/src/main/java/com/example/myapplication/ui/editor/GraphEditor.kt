@@ -47,6 +47,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.drawText
@@ -178,6 +180,7 @@ private fun GraphCanvas(state: EditorState, layer: Layer, key: PropKey, track: T
     val unit = remember(key, spec, state.settings) { unitFor(key, spec,state.settings.width.toFloat(),state.settings.height.toFloat()) }
     val measurer = rememberTextMeasurer()
     val haptics = LocalHapticFeedback.current
+    val shortLandscape=LocalConfiguration.current.let { it.screenWidthDp>it.screenHeightDp*1.35f && it.screenHeightDp<520 }
     val duration = state.duration
     var frozenTime by remember(key,speedMode,fitKeys) { mutableStateOf<Pair<Float,Float>?>(null) }
     val timeStart=frozenTime?.first ?: if(fitKeys && track.keys.size>1) (track.keys.first().time-.08f*(track.keys.last().time-track.keys.first().time)).coerceAtLeast(0f) else 0f
@@ -233,7 +236,8 @@ private fun GraphCanvas(state: EditorState, layer: Layer, key: PropKey, track: T
     Canvas(
         Modifier
             .fillMaxWidth()
-            .height(240.dp)
+            .height(if(shortLandscape) 96.dp else 180.dp)
+            .testTag("graph-canvas")
             .clip(RoundedCornerShape(12.dp))
             .background(Ink950)
             .border(1.dp, Line, RoundedCornerShape(12.dp))

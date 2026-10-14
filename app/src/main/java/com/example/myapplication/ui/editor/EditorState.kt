@@ -166,7 +166,9 @@ class EditorState(val settings: ProjectSettings, template: Template?, restored: 
         selectedId = id
         parentError = null
         graphKeyIndex = null
-        if (id == null) panel = null
+        val type=selected?.type
+        if(type==null) panel=null
+        else if(panel!=null && panel !in panelsFor(type)) panel=EditorPanel.Transform
         save()
     }
 

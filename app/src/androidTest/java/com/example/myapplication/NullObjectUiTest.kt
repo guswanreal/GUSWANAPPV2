@@ -30,7 +30,7 @@ class NullObjectUiTest {
         compose.onAllNodesWithText("Null 1").onFirst().assertIsDisplayed()
         compose.onNodeWithText("Parent").performClick()
         compose.mainClock.advanceTimeBy(1000)
-        compose.onNodeWithText("Tidak ada").assertIsDisplayed()
+        compose.onNodeWithText("Tidak ada").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun generateOfflineMotionFromEditor() {
@@ -44,7 +44,7 @@ class NullObjectUiTest {
         compose.onNodeWithText("Buat motion di timeline").performScrollTo().performClick()
         compose.mainClock.advanceTimeBy(1000)
         compose.onAllNodesWithText("Motion title").onFirst().assertIsDisplayed()
-        compose.onNodeWithText("Mode 3D").assertIsDisplayed()
+        compose.onNodeWithText("Mode 3D").performScrollTo().assertIsDisplayed()
     }
 }
 
