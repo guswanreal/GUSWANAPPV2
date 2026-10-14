@@ -2,6 +2,7 @@
 set -euo pipefail
 app_id=com.example.myapplication.preview
 mkdir -p work-ui
+adb shell settings put secure show_ime_with_hard_keyboard 1
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 result=0

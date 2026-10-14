@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.type
@@ -516,7 +517,7 @@ private fun TransportBar(state: EditorState,compact:Boolean=false) {
         }
         Row(Modifier.fillMaxWidth().heightIn(min=56.dp).padding(horizontal=if(compact) 4.dp else 10.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=if(roomy) Arrangement.Center else Arrangement.Start) {
             if(!roomy) Column(Modifier.weight(1f)) {
-                Text(state.timecode(state.time),style=MonoLabel.copy(fontSize=17.sp,lineHeight=22.sp,fontWeight=FontWeight.SemiBold),color=Accent,maxLines=1,overflow=TextOverflow.Ellipsis)
+                Text(state.timecode(state.time),style=MonoLabel.copy(fontSize=if(compact && LocalDensity.current.fontScale>=1.5f) 13.sp else 17.sp,lineHeight=22.sp,fontWeight=FontWeight.SemiBold),color=Accent,maxLines=1,overflow=TextOverflow.Ellipsis)
                 if(!compact) Text("/ ${state.timecode(state.duration)}",style=MonoLabel,color=TextLow)
             }
             ToolButton(Icons.Rounded.SkipPrevious,"Keyframe sebelumnya",{state.jumpKey(null,next=false)},tint=TextHigh)
@@ -642,7 +643,7 @@ private fun EditorToolbar(state: EditorState, importing: Boolean, mediaProgress:
             label = "toolbar",
         ) { id ->
             val l = state.layers.firstOrNull { it.id == id }
-            LazyRow(contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            LazyRow(modifier=Modifier.testTag("editor-toolbar"),contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (l == null) {
                     item { ToolCaption("Tambah") }
                     val media = mediaProgress >= 0f
@@ -686,6 +687,8 @@ private fun ToolItem(
     onClick: () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
+    var focused by remember { mutableStateOf(false) }
+    val width=80.dp*LocalDensity.current.fontScale.coerceAtLeast(1f)
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.9f else 1f, spring(stiffness = Spring.StiffnessMedium), label = "toolScale")
     val fg by animateColorAsState(
@@ -694,11 +697,13 @@ private fun ToolItem(
     val bar by animateFloatAsState(if (active) 1f else 0f, spring(stiffness = Spring.StiffnessMediumLow), label = "toolBar")
     Column(
         Modifier
-            .width(80.dp)
+            .width(width)
             .heightIn(min = 60.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(RoundedCornerShape(8.dp))
             .background(if(active) Ink700 else Color.Transparent)
+            .border(if(focused) 2.dp else 0.dp,if(focused) TextHigh else Color.Transparent,RoundedCornerShape(8.dp))
+            .onFocusChanged { focused=it.isFocused }
             .clickable(interaction, LocalIndication.current, enabled = enabled, role = Role.Button, onClick = onClick)
             .padding(top = 8.dp, bottom = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -732,11 +737,8 @@ private fun PanelSheet(state: EditorState, modifier: Modifier, importing: Boolea
         val p = lastPanel.value ?: return@AnimatedVisibility
         val shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)
         Column(Modifier.fillMaxSize().clip(shape).background(Ink850).border(1.dp, Line, shape).pointerInput(Unit) { detectTapGestures { } }) {
-            Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
-                Box(Modifier.size(width = 36.dp, height = 4.dp).clip(CircleShape).background(LineStrong))
-            }
             Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                ToolButton(Icons.Rounded.Close, "Tutup panel", { state.panel = null })
+                ToolButton(Icons.Rounded.Close, "Tutup panel", { state.panel = null },size=44.dp)
                 Box(Modifier.weight(1f)) { PanelTitle(p, l) }
             }
             AnimatedContent(

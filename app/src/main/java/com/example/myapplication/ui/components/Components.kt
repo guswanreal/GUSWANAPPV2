@@ -145,7 +145,7 @@ fun ActionButton(
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(RoundedCornerShape(10.dp))
             .background(if (primary) Accent else Ink700)
-            .border(if(focused) 2.dp else 0.dp,if(focused) TextHigh else Color.Transparent,RoundedCornerShape(10.dp))
+            .border(if(focused) 2.dp else 0.dp,if(focused) (if(primary) Ink950 else TextHigh) else Color.Transparent,RoundedCornerShape(10.dp))
             .onFocusChanged { focused=it.isFocused }
             .then(if (primary) Modifier else Modifier.border(1.dp, Line, RoundedCornerShape(10.dp)))
             .clickable(interaction, LocalIndication.current, role = Role.Button, onClick = onClick)

@@ -212,6 +212,9 @@ internal fun ScrubValue(
         val parsed=text.replace(',', '.').toFloatOrNull()?.takeIf { it.isFinite() }
         AlertDialog(
             onDismissRequest = { editing = false },
+            modifier=Modifier.onKeyEvent { event ->
+                if(event.type==KeyEventType.KeyDown && event.key==Key.Escape) { editing=false; true } else false
+            },
             containerColor = Ink800,
             title = { Text(name, style = MaterialTheme.typography.titleMedium, color = TextHigh) },
             text = {

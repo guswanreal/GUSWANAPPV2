@@ -44,6 +44,7 @@ internal fun CurveControls(state: EditorState,layer: Layer,key: PropKey,track: T
                 FlowCurves.forEach { curve ->
                     var focused by remember { mutableStateOf(false) }
                     Column(Modifier.width(84.dp).clip(RoundedCornerShape(6.dp)).background(Ink950)
+                        .testTag("flow-${curve.name}")
                         .border(if(focused) 2.dp else 1.dp,if(focused) TextHigh else LineStrong,RoundedCornerShape(6.dp))
                         .onFocusChanged { focused=it.isFocused }
                         .clickable(onClickLabel="Terapkan kurva ${curve.name}") { state.applyCurve(key,if(all) null else segment,curve); state.graphKeyIndex=segment }

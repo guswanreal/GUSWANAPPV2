@@ -3,6 +3,8 @@ package com.example.myapplication
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -19,6 +21,11 @@ import java.io.File
 class EditorWorkspaceUiTest {
     @get:Rule val compose=createComposeRule()
     private val context get()=InstrumentationRegistry.getInstrumentation().targetContext
+    private fun tool(name:String) {
+        compose.onNodeWithTag("editor-toolbar").performScrollToNode(hasText(name))
+        compose.onNodeWithText(name).performClick()
+        android.util.Log.i("EditorUiQa","Opened $name")
+    }
     private fun open(layerOverride:Layer?=null) {
         android.util.Log.i("EditorUiQa","Creating editor content")
         compose.mainClock.autoAdvance=true
@@ -41,11 +48,11 @@ class EditorWorkspaceUiTest {
         open()
         compose.onNodeWithTag("editor-workspace").assertIsDisplayed()
         capture("editor")
-        compose.onNodeWithText("Graph").performClick()
+        tool("Graph")
         compose.mainClock.advanceTimeBy(1000)
         compose.onNodeWithTag("curve-controls").assertExists()
         FlowCurves.forEach { curve ->
-            compose.onNodeWithText(curve.name).performScrollTo().performClick()
+            compose.onNodeWithTag("flow-${curve.name}").performScrollTo().performClick()
             android.util.Log.i("EditorUiQa","Applied curve ${curve.name}")
         }
         compose.mainClock.advanceTimeBy(1000)
@@ -62,6 +69,8 @@ class EditorWorkspaceUiTest {
         compose.onNodeWithText("Terapkan").performClick()
         compose.mainClock.advanceTimeBy(1000)
         compose.onNodeWithTag("graph-canvas").performScrollTo().assertIsDisplayed()
+        val configuration=context.resources.configuration
+        compose.onNodeWithTag("graph-canvas").assertHeightIsEqualTo(if(configuration.screenWidthDp>configuration.screenHeightDp*1.35f && configuration.screenHeightDp<520) 96.dp else 180.dp)
         capture("graph")
         compose.onNodeWithContentDescription("Tutup panel").performClick()
         compose.mainClock.advanceTimeBy(1000)
@@ -70,18 +79,21 @@ class EditorWorkspaceUiTest {
 
     @Test(timeout=120000) fun numericControlsRejectInvalidValuesAndEffectPresetsAreReachable() {
         open()
-        compose.onNodeWithText("Transform").performClick()
+        tool("Transform")
         android.util.Log.i("EditorUiQa","Transform opened")
         compose.mainClock.advanceTimeBy(1000)
         compose.onNodeWithTag("scrub-Position X").performScrollTo().performClick()
         android.util.Log.i("EditorUiQa","Numeric dialog opened")
         compose.mainClock.advanceTimeBy(1000)
-        compose.onNode(hasSetTextAction()).performTextReplacement("NaN")
+        compose.onNode(hasSetTextAction()).performClick().performTextReplacement("NaN").assertIsDisplayed()
         compose.onNodeWithText("Masukkan angka yang valid.").assertIsDisplayed()
         compose.onNodeWithText("Terapkan").assertIsNotEnabled()
         compose.onNodeWithText("Batal").performClick()
         compose.mainClock.advanceTimeBy(1000)
-        compose.onNodeWithText("Efek").performClick()
+        compose.onNodeWithTag("scrub-Position X").performScrollTo().performClick()
+        compose.onNode(hasSetTextAction()).performClick().performKeyInput { pressKey(Key.Escape) }
+        compose.onNodeWithText("Terapkan").assertDoesNotExist()
+        tool("Efek")
         compose.mainClock.advanceTimeBy(1000)
         compose.onNodeWithText("Tambah efek").performClick()
         compose.mainClock.advanceTimeBy(1000)
@@ -89,22 +101,29 @@ class EditorWorkspaceUiTest {
         compose.onNodeWithText("RGB hit").performScrollTo().performClick()
         compose.mainClock.advanceTimeBy(1000)
         compose.onNodeWithText("RGB Split").assertExists()
+        for(name in listOf("Color Balance","Chroma Key","Luma Key")) {
+            compose.onNodeWithText("Tambah efek").performScrollTo().performClick()
+            compose.onNode(hasSetTextAction()).performTextReplacement(name)
+            compose.onNodeWithText(name).performScrollTo().performClick()
+            compose.onNodeWithText(name).assertExists()
+            android.util.Log.i("EditorUiQa","Added $name")
+        }
     }
 
     @Test(timeout=120000) fun cameraRigButtonCreatesANullAndItsEffectsAreReachable() {
         open(Layer(1,"Camera 1",LayerType.Camera,Color(0xFFFF6A2B),0f,6f))
-        compose.onNodeWithText("Transform").performClick()
+        tool("Transform")
         compose.onNodeWithText("Buat Null pengendali kamera").performScrollTo().performClick()
         compose.mainClock.advanceTimeBy(1000)
         compose.onNodeWithText("Mode 3D").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Efek").performClick()
+        tool("Efek")
         compose.onNodeWithText("Tambah efek").performScrollTo().performClick()
         compose.onNodeWithText("Preset stack").performClick()
         compose.onNodeWithText("Handheld rig").performScrollTo().performClick()
         compose.onNodeWithText("Shake").assertExists()
         compose.onNodeWithContentDescription("Pilih layer").performClick()
         compose.onNodeWithText("Camera 1").performClick()
-        compose.onNodeWithText("Parent").performClick()
+        tool("Parent")
         compose.onNodeWithText("Tidak ada").performScrollTo().performClick()
         android.util.Log.i("EditorUiQa","Camera rig created, effect applied, camera detached")
     }
@@ -116,7 +135,7 @@ class EditorWorkspaceUiTest {
             for(i in 0..5) File(directory,"f%05d.jpg".format(i)).outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG,95,it) }
             val footage=Footage("blank-ui","file:///test",false,480,360,.5f,10f,6,directory.path)
             open(Layer(1,"Video 1",LayerType.Video,Color.White,0f,.5f,footage=footage))
-            compose.onNodeWithText("Tracking").performClick()
+            tool("Tracking")
             compose.onNodeWithTag("face-tracking-panel").assertExists()
             compose.onNodeWithText("Camera solve").performScrollTo().performClick()
             compose.onNodeWithText("Tracking kamera 3D").assertExists()

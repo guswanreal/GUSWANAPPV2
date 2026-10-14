@@ -2,6 +2,8 @@ package com.example.myapplication.ui.editor
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
@@ -21,11 +23,12 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun TrackingPanel(state: EditorState, layer: Layer) {
     var face by remember(layer.id) { mutableStateOf(true) }
     Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
-        androidx.compose.foundation.layout.Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
             ChoiceChip("Face 3D",face) { face=true }
             ChoiceChip("Camera solve",!face) { face=false }
         }
