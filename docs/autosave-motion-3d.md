@@ -21,7 +21,7 @@ dan AGSL. Tidak ada pipeline OpenGL kedua yang menggandakan preview/ekspor.
    dengan offset untuk menjaga posisi saat mengganti parent.
 5. Tambahkan **Optical Flares** dari browser efek. Atur posisi, intensity, size,
    streak, ghosts, dan hue; parameter bisa diberi keyframe seperti efek lainnya.
-6. Pilih video dengan transform awal, buka **Track Kamera 3D**, atur FOV vertikal,
+6. Pilih video dengan transform awal, buka **Tracking > Camera solve**, atur FOV vertikal,
    lalu **Analisis & buat kamera 3D**. Hasilnya Camera dan Tracked Null. Aktifkan
    Mode 3D pada layer tambahan, parent ke Tracked Null, dan sesuaikan posisi lokal.
 
@@ -79,6 +79,8 @@ Hasil 10 Oktober 2026: build debug + test APK berhasil; 25/25 instrumentation te
 lulus pada emulator Android 16. Tes ekspor memverifikasi 320x180, 24 frame untuk
 1 detik, serta piksel hasil render yang bervariasi. Frame MP4 juga diperiksa visual.
 Log: `instrumentation-advanced.log`; gambar: `motion-export-check.png`.
+
+Catatan tersebut merupakan validasi awal. Upgrade workspace, graph, face tracking dan rig kamera memakai validasi cloud yang tercatat di [editor-validation.md](editor-validation.md).
 
 API yang dipakai: [HardwareRenderer FrameRenderRequest](https://developer.android.com/reference/android/graphics/HardwareRenderer.FrameRenderRequest).
 Library tes memakai Espresso 3.7.0 untuk kompatibilitas injeksi input Android 16;
