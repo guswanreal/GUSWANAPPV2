@@ -611,7 +611,7 @@ private fun PreviewStage(state: EditorState, modifier: Modifier) {
             }
         }
         AnimatedVisibility(
-            selected != null && !state.playing,
+            selected != null && !state.playing && LocalDensity.current.fontScale<1.5f,
             enter = fadeIn(tween(160)) + slideInVertically(tween(200)) { -it / 2 },
             exit = fadeOut(tween(120)),
             modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
@@ -983,4 +983,3 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     is ContextWrapper -> baseContext.findActivity()
     else -> null
 }
-

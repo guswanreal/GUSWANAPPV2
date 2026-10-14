@@ -2,7 +2,6 @@ package com.example.myapplication
 
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.*
@@ -43,7 +42,8 @@ class EditorWorkspaceUiTest {
         android.util.Log.i("EditorUiQa","Editor content ready")
     }
     private fun capture(name:String) {
-        val bitmap=compose.onAllNodes(isRoot()).onLast().captureToImage().asAndroidBitmap()
+        compose.waitForIdle()
+        val bitmap=InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()!!
         val orientation=if(bitmap.width>bitmap.height) "landscape" else "portrait"
         org.junit.Assert.assertEquals(InstrumentationRegistry.getArguments().getString("qaOrientation") ?: "portrait",orientation)
         val scale=context.resources.configuration.fontScale
