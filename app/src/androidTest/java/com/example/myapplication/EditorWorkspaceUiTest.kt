@@ -83,10 +83,11 @@ class EditorWorkspaceUiTest {
         compose.onNodeWithTag("graph-canvas").assertHeightIsEqualTo(if(configuration.screenWidthDp>configuration.screenHeightDp*1.35f && configuration.screenHeightDp<520) 96.dp else 180.dp)
         val density=compose.activity.resources.displayMetrics.density
         val fontScale=compose.activity.resources.configuration.fontScale.coerceAtLeast(1f)
+        val graphBounds=compose.onNodeWithTag("graph-canvas").fetchSemanticsNode().boundsInRoot
         var expectedTime=2f
         compose.onNodeWithTag("graph-canvas").performTouchInput {
-            val left=52f*density*fontScale; val right=size.width-14f*density
-            val top=16f*density; val bottom=size.height-24f*density*fontScale
+            val left=52f*density*fontScale; val right=graphBounds.width-14f*density
+            val top=16f*density; val bottom=graphBounds.height-24f*density*fontScale
             expectedTime=2f-10f*density/(right-left)*2.16f
             down(Offset(left+(right-left)*2f/2.16f,top+(bottom-top)*.109375f))
             moveBy(Offset(-5f*density,5f*density))
