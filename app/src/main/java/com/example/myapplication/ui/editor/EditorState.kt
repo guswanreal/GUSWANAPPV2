@@ -34,6 +34,7 @@ import com.example.myapplication.engine.Handle
 import com.example.myapplication.engine.segmentHandles
 import com.example.myapplication.engine.FaceSolve3D
 import com.example.myapplication.engine.FacePose3D
+import com.example.myapplication.engine.EffectPreset
 import com.example.myapplication.engine.footageToScreen
 import com.example.myapplication.ui.theme.LayerColors
 import kotlin.math.abs
@@ -109,7 +110,7 @@ class EditorState(val settings: ProjectSettings, template: Template?, restored: 
         fun track(value: (FacePose3D,Int)->Float)=Track(0f,solve.poses.mapIndexed { i,p -> Keyframe(p.time,value(p,i),Easing.Linear) })
         fun distance(p:FacePose3D)=(reference/p.width.coerceAtLeast(.01f)).coerceIn(.25f,4f)
         val rig=Layer(id,"Face Null 3D",LayerType.Null,video.color,solve.poses.first().time,solve.poses.last().time,
-            is3D=true,cameraIgnore=true,easing=Easing.Linear)
+            is3D=true,cameraIgnore=true,easing=Easing.Linear,faceSolve=solve)
             .withTrack(Prop.PosX,track { p,i -> (positions[i].x/size.width*2-1)*distance(p) })
             .withTrack(Prop.PosY,track { p,i -> (positions[i].y/size.height*2-1)*distance(p) })
             .withTrack(Prop.PosZ,track { p,_ -> (.8660254f*(distance(p)-1)).coerceAtLeast(-.7f) })
@@ -187,6 +188,7 @@ class EditorState(val settings: ProjectSettings, template: Template?, restored: 
 
     /** Sets a value at the playhead; writes a keyframe when the property's stopwatch is on. */
     fun setValue(key: PropKey, value: Float) = updateSelected("value-$key-$selectedId") { l ->
+        if(!value.isFinite()) return@updateSelected l
         val tr = l.trackOf(key) ?: return@updateSelected l
         l.withTrackOf(key, tr.withValueAt(snap(time), value))
     }
@@ -320,6 +322,15 @@ class EditorState(val settings: ProjectSettings, template: Template?, restored: 
         panel = EditorPanel.Effects
     }
 
+    fun addPreset(preset: EffectPreset) {
+        val layer=selected ?: return
+        if(!preset.appliesTo(layer.type)) return
+        val added=preset.build(layer,time,nextEffectUid())
+        updateSelected { it.copy(effects=it.effects+added) }
+        expandedFx=expandedFx+added.map { it.uid }
+        panel=EditorPanel.Effects
+    }
+
     fun removeEffect(uid: Int) = updateSelected { l -> l.copy(effects = l.effects.filterNot { it.uid == uid }) }
 
     fun toggleEffect(uid: Int) = updateSelected { l -> l.copy(effects = l.effects.map { if (it.uid == uid) it.copy(enabled = !it.enabled) else it }) }
@@ -349,10 +360,18 @@ class EditorState(val settings: ProjectSettings, template: Template?, restored: 
         try {
             val next = reparentLayer(layers, layer.id, parentId, time,
                 Size(settings.width.toFloat(), settings.height.toFloat()))
-            updateSelected { next }
+            val faceParent=layers.firstOrNull { it.id==parentId }?.let { it.type==LayerType.Null && it.faceSolve!=null } == true
+            updateSelected { if(faceParent) next.copy(cameraIgnore=true) else next }
         } catch (e: IllegalArgumentException) {
             parentError = e.message
         }
+    }
+
+    fun centerOnParent() = updateSelected { layer ->
+        if(layer.parentId==null || layer.locked) return@updateSelected layer
+        var next=layer.copy(parentOffset=com.example.myapplication.engine.ParentOffset(),spatialOffset=emptyList())
+        for(p in listOf(Prop.PosX,Prop.PosY,Prop.PosZ)) next=next.withTrack(p,next.track(p).withValueAt(snap(time),0f))
+        next
     }
 
     fun setBlend(blend: BlendKind) = updateSelected { it.copy(blend = blend) }
@@ -431,11 +450,15 @@ class EditorState(val settings: ProjectSettings, template: Template?, restored: 
 
     /** Trims a clip's in or out point, keeping at least a few frames. */
     fun trim(id: Int, startDelta: Float, endDelta: Float) = updateLayer(id, "trim-$id") { l ->
-        val minLen = 5 * frame
+        val minLen = minOf(5 * frame,l.end-l.start).coerceAtLeast(KEY_EPS)
+        val video=l.footage?.takeUnless { it.isImage }
+        val minStart=if(video==null) 0f else (l.start-l.sourceIn).coerceAtLeast(0f)
+        val maxEnd=if(video==null) duration else minOf(duration,l.start+video.duration-l.sourceIn)
+        val start=(l.start+startDelta).coerceIn(minStart,(l.end-minLen).coerceAtLeast(minStart))
         l.copy(
-            start = (l.start + startDelta).coerceIn(0f, (l.end - minLen).coerceAtLeast(0f)),
-            end = (l.end + endDelta).coerceIn(l.start + minLen, duration),
-            sourceIn = if(l.footage!=null) (l.sourceIn + (l.start + startDelta).coerceIn(0f,(l.end-minLen).coerceAtLeast(0f))-l.start).coerceAtLeast(0f) else l.sourceIn,
+            start = start,
+            end = (l.end + endDelta).coerceIn(start+minLen,maxEnd.coerceAtLeast(start+minLen)),
+            sourceIn = if(video!=null) (l.sourceIn+start-l.start).coerceAtLeast(0f) else l.sourceIn,
         )
     }
 

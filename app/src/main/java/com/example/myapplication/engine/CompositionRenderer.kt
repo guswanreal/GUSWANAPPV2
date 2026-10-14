@@ -610,3 +610,4 @@ fun screenToFootage(layers: List<Layer>, layerId: Int, t: Float, size: Size, poi
     val u = local.x / fit.width + 0.5f; val v = local.y / fit.height + 0.5f
     return if (u in 0f..1f && v in 0f..1f) Offset(u, v) else null
 }
+

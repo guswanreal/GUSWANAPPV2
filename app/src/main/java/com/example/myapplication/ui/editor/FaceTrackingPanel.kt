@@ -74,3 +74,4 @@ private fun FaceTrackingPanel(state: EditorState, layer: Layer) {
         error?.let { Text(it,color=Danger,modifier=Modifier.padding(vertical=4.dp)) }
     }
 }
+

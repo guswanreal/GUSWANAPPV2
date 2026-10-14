@@ -38,3 +38,4 @@ Kotlin / Jetpack Compose Android application com.example.myapplication, minSdk 3
 Validation command once the cloud JDK and Android SDK are configured: ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:assembleDebugAndroidTest --console=plain. Use cloud emulator/device infrastructure for instrumentation; never silently fall back to the owner's overloaded laptop.
 
 The source package omits build outputs, .gradle, .idea, local.properties, local logs, backups and user media. It preserves source, tests, bundled resources, docs, Gradle configuration and wrapper.
+

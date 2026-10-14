@@ -110,3 +110,4 @@ object FaceTracker3D {
         FaceSolve3D(samples,analyzed,detected)
     }
 }
+

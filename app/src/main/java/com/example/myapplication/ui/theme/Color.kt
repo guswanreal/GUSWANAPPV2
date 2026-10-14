@@ -23,7 +23,7 @@ val AccentDeep = Color(0xFFE2531A)
 
 // Label colours for layers, templates and materials, tuned to sit together on graphite.
 val Pink = Color(0xFFE8668F)
-val Blue = Color(0xFF4C8DF6)
+val Blue = Color(0xFF7CA7F7)
 val BlueDeep = Color(0xFF3471D8)
 val Violet = Color(0xFF9B7BEA)
 val Cyan = Color(0xFF3DB8C9)
@@ -34,3 +34,4 @@ val Danger = Color(0xFFEF5350)
 
 /** Colors used to tell layer types apart on the timeline. */
 val LayerColors = listOf(Pink, Blue, Violet, Cyan, Amber, Emerald, Lime)
+

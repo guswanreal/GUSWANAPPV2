@@ -140,7 +140,7 @@ fun reparentLayer(
     require(canParentLayer(layers, childId, parentId)) { "Parent tidak valid atau membentuk siklus." }
     val byId = layers.associateBy { it.id }
     val child = byId.getValue(childId)
-    if (child.parentId == parentId) return child
+    if (child.parentId == parentId && keepWorld) return child
     val parent = parentId?.let(byId::get)
     if (child.type == LayerType.Camera || child.is3D || parent?.is3D == true) {
         require(child.supports3D()) { "Layer ini belum mendukung parenting 3D." }
@@ -156,3 +156,4 @@ fun reparentLayer(
     val offset = Matrix().apply { setConcat(inverse, oldBasis) }
     return child.copy(parentId = parentId, parentOffset = ParentOffset.fromPixels(offset, size))
 }
+

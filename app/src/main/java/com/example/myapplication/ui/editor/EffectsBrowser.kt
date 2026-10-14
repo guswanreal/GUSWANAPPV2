@@ -51,6 +51,8 @@ import com.example.myapplication.engine.LayerType
 import com.example.myapplication.engine.Prop
 import com.example.myapplication.engine.ShapeKind
 import com.example.myapplication.engine.Track
+import com.example.myapplication.engine.EffectPreset
+import com.example.myapplication.engine.EffectPresets
 import com.example.myapplication.engine.drawComposition
 import com.example.myapplication.ui.theme.Accent
 import com.example.myapplication.ui.theme.Blue
@@ -65,20 +67,25 @@ import com.example.myapplication.ui.theme.TextMid
 /** After Effects' "Effects & Presets" panel as a searchable sheet with rendered previews. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun EffectsBrowserSheet(onDismiss: () -> Unit, onPick: (FxType) -> Unit) {
+internal fun EffectsBrowserSheet(onDismiss: () -> Unit, layerType:LayerType=LayerType.Shape, onPreset:((EffectPreset)->Unit)?=null, onPick: (FxType) -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Ink850, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         var query by remember { mutableStateOf("") }
         var category by remember { mutableStateOf<FxCategory?>(null) }
+        var presets by remember { mutableStateOf(false) }
         val measurer = rememberTextMeasurer(COMPOSITION_TEXT_CACHE)
         val q = query.trim()
         val matches = FxType.entries.filter { t ->
-            (category == null || t.category == category) &&
+            t.appliesTo(layerType) && (category == null || t.category == category) &&
                 (q.isEmpty() || t.label.contains(q, true) || t.description.contains(q, true) || t.category.label.contains(q, true))
         }
         Column(Modifier.fillMaxHeight(0.92f)) {
             Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Effects & Presets", style = MaterialTheme.typography.titleLarge, color = TextHigh, modifier = Modifier.weight(1f))
-                Text("${FxType.entries.size} efek", style = MonoLabel, color = TextLow)
+                Text("${FxType.entries.count { it.appliesTo(layerType) }} efek", style = MonoLabel, color = TextLow)
+            }
+            if(onPreset!=null) Row(Modifier.padding(horizontal=16.dp,vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                ChoiceChip("Efek",!presets) { presets=false }
+                ChoiceChip("Preset stack",presets) { presets=true }
             }
             OutlinedTextField(
                 value = query,
@@ -90,18 +97,31 @@ internal fun EffectsBrowserSheet(onDismiss: () -> Unit, onPick: (FxType) -> Unit
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Accent, unfocusedBorderColor = LineStrong),
             )
-            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if(!presets) LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item { ChoiceChip("Semua", category == null) { category = null } }
                 items(FxCategory.entries, key = { it.name }) { c -> ChoiceChip(c.label, category == c) { category = c } }
             }
             LazyColumn(contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp)) {
-                matches.groupBy { it.category }.forEach { (cat, types) ->
+                if(presets && onPreset!=null) {
+                    val found=EffectPresets.filter { it.appliesTo(layerType) && (q.isEmpty() || it.name.contains(q,true) || it.description.contains(q,true) || it.types.any { t -> t.label.contains(q,true) }) }
+                    items(found,key={it.id}) { preset ->
+                        Row(Modifier.fillMaxWidth().heightIn(min=80.dp).clickable(onClickLabel="Tambah preset ${preset.name}") { onPreset(preset) }.padding(horizontal=20.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(preset.name,style=MaterialTheme.typography.titleMedium,color=TextHigh)
+                                Text(preset.description,style=MaterialTheme.typography.bodySmall,color=TextMid)
+                                Text(preset.types.joinToString { it.label },style=MaterialTheme.typography.labelSmall,color=TextLow)
+                            }
+                            Icon(Icons.Rounded.Add,null,tint=Accent)
+                        }
+                    }
+                    if(found.isEmpty()) item { Text("Preset tidak ditemukan. Ubah kata pencarian.",color=TextMid,modifier=Modifier.padding(20.dp)) }
+                } else matches.groupBy { it.category }.forEach { (cat, types) ->
                     item(key = "h-${cat.name}") {
-                        Text(cat.label.uppercase(), style = MonoLabel, color = TextLow, modifier = Modifier.padding(start = 20.dp, top = 14.dp, bottom = 4.dp))
+                        Text(cat.label, style = MaterialTheme.typography.labelLarge, color = TextMid, modifier = Modifier.padding(start = 20.dp, top = 14.dp, bottom = 4.dp))
                     }
                     items(types, key = { it.name }) { t -> EffectRow(t, measurer) { onPick(t) } }
                 }
-                if (matches.isEmpty()) {
+                if (!presets && matches.isEmpty()) {
                     item { Text("Tidak ada efek yang cocok dengan \"$q\".", style = MaterialTheme.typography.bodyMedium, color = TextMid, modifier = Modifier.padding(20.dp)) }
                 }
             }
@@ -146,3 +166,4 @@ private fun sampleLayers(type: FxType): List<Layer> = listOf(
         effects = listOf(EffectInstance.of(type, 1)),
     ),
 )
+

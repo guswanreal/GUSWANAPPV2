@@ -189,3 +189,4 @@ object ProjectCodec {
             spatialOffset=o.optJSONArray("spatialOffset")?.let { a -> List(a.length()) { a.getDouble(it).toFloat() }.also { require(it.isEmpty() || it.size==16) } }.orEmpty())
     }
 }
+

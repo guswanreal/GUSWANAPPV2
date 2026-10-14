@@ -58,3 +58,4 @@ class MotionCurvesTest {
         assertEquals(0f,mid[1],.0001f)
     }
 }
+

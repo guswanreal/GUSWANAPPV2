@@ -93,3 +93,4 @@ internal fun CurveControls(state: EditorState,layer: Layer,key: PropKey,track: T
         }
     }
 }
+

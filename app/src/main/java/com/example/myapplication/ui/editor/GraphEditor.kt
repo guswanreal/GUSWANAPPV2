@@ -175,6 +175,14 @@ private fun GraphCanvas(state: EditorState, layer: Layer, key: PropKey, track: T
         var lo = Float.MAX_VALUE; var hi = -Float.MAX_VALUE
         for (i in 0..120) { val v = track.valueAt(timeStart+timeSpan*i/120f, easing); lo = min(lo, v); hi = max(hi, v) }
         track.keys.forEach { lo = min(lo, it.value); hi = max(hi, it.value) }
+        for(i in 0 until track.keys.lastIndex) {
+            val a=track.keys[i]; val b=track.keys[i+1]
+            segmentHandles(a,b,a.easing ?: easing)?.let { (out,incoming) ->
+                val p=a.value+out.speed*out.influence*(b.time-a.time)
+                val q=b.value-incoming.speed*incoming.influence*(b.time-a.time)
+                lo=minOf(lo,p,q); hi=maxOf(hi,p,q)
+            }
+        }
         if (hi - lo < 1e-4f) { val pad = max(abs(hi) * 0.2f, (spec.max - spec.min) * 0.05f); lo -= pad; hi += pad }
         val pad = (hi - lo) * 0.14f
         (lo - pad)..(hi + pad)
@@ -185,10 +193,17 @@ private fun GraphCanvas(state: EditorState, layer: Layer, key: PropKey, track: T
             val v=track.velocityAt(timeStart+timeSpan*i/240f,easing)*uiPerUnit
             lo=min(lo,v); hi=max(hi,v)
         }
+        for(i in 0 until track.keys.lastIndex) {
+            val a=track.keys[i]; val b=track.keys[i+1]
+            segmentHandles(a,b,a.easing ?: easing)?.let { (out,incoming) ->
+                lo=minOf(lo,out.speed*uiPerUnit,incoming.speed*uiPerUnit)
+                hi=maxOf(hi,out.speed*uiPerUnit,incoming.speed*uiPerUnit)
+            }
+        }
         val pad=max((hi-lo)*.16f,1e-3f)
         (lo-pad)..(hi+pad)
     }
-    var frozen by remember { mutableStateOf<ClosedFloatingPointRange<Float>?>(null) }
+    var frozen by remember(key,speedMode,fitKeys) { mutableStateOf<ClosedFloatingPointRange<Float>?>(null) }
     val range = frozen ?: if(speedMode) speedRange else valueRange
 
     val s by rememberUpdatedState(state)
@@ -341,4 +356,5 @@ private fun GraphCanvas(state: EditorState, layer: Layer, key: PropKey, track: T
         drawLine(LineStrong, Offset(left, bottom), Offset(right, bottom), 1f)
     }
 }
+
 

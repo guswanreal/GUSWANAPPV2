@@ -201,3 +201,4 @@ fun Layer.transformProperties(): List<Prop> = if(type == LayerType.Camera) type.
     listOf(Prop.AnchorX,Prop.AnchorY,Prop.PosX,Prop.PosY,Prop.PosZ,Prop.Scale,Prop.Rotation,Prop.OrbitX,Prop.OrbitY)
         .let { if(type==LayerType.Null) it else it+Prop.Opacity }
     else type.transformProps()
+

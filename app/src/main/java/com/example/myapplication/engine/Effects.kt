@@ -92,6 +92,15 @@ private fun singleEffect(e: EffectInstance, ctx: FxContext): RenderEffect? {
         FxType.Threshold -> shader(Shaders.Threshold) { setFloatUniform("level", p(0)) }
         FxType.Invert -> colorMatrix(invert(p(0)))
         FxType.Posterize -> shader(Shaders.Posterize) { setFloatUniform("levels", p(0).coerceAtLeast(2f)) }
+        FxType.ColorBalance -> shader(Shaders.ColorBalance) { setFloatUniform("balance",p(0),p(1),p(2)) }
+        FxType.ChromaKey -> shader(Shaders.ChromaKey) {
+            val key=Color.hsv((p(0)%360f+360f)%360f,1f,1f)
+            setFloatUniform("keyColor",key.red,key.green,key.blue)
+            setFloatUniform("threshold",p(1)); setFloatUniform("softness",p(2).coerceAtLeast(.001f)); setFloatUniform("despill",p(3))
+        }
+        FxType.LumaKey -> shader(Shaders.LumaKey) {
+            setFloatUniform("threshold",p(0)); setFloatUniform("softness",p(1).coerceAtLeast(.001f)); setFloatUniform("invert",if(p(2)>=.5f) 1f else 0f)
+        }
 
         FxType.WaveWarp -> shader(Shaders.WaveWarp) {
             setFloatUniform("height", p(0) * ctx.px)
@@ -354,6 +363,7 @@ private object Shaders {
             "Noise" to Noise, "Vignette" to Vignette, "Fractal" to Fractal, "Ramp" to Ramp, "Flare" to Flare, "OpticalFlares" to OpticalFlares,
             "LightLeak" to LightLeak, "LinearWipe" to LinearWipe, "RadialWipe" to RadialWipe, "IrisWipe" to IrisWipe,
             "Blinds" to Blinds, "BlockDissolve" to BlockDissolve,
+            "ColorBalance" to ColorBalance, "ChromaKey" to ChromaKey, "LumaKey" to LumaKey,
         )
     }
 
@@ -363,6 +373,35 @@ private object Shaders {
             float4 acc = float4(0.0);
             for (int i = 0; i < 16; i++) { acc += content.eval(p + dir * (float(i) / 15.0 - 0.5)); }
             return half4(acc / 16.0);
+        }"""
+
+    const val ColorBalance = """
+        uniform shader content; uniform float3 balance;
+        half4 main(float2 p) {
+            float4 c=content.eval(p);
+            return half4(clamp(c.rgb+balance*c.a,float3(0.0),float3(c.a)),c.a);
+        }"""
+
+    const val ChromaKey = """
+        uniform shader content; uniform float3 keyColor; uniform float threshold; uniform float softness; uniform float despill;
+        half4 main(float2 p) {
+            float4 c=content.eval(p);
+            float3 rgb=c.rgb/max(c.a,0.0001);
+            float3 chroma=rgb/max(dot(rgb,float3(1.0)),0.0001);
+            float3 key=keyColor/max(dot(keyColor,float3(1.0)),0.0001);
+            float mask=smoothstep(threshold,threshold+softness,length(chroma-key));
+            float spill=max(dot(rgb,keyColor)-dot(rgb,(float3(1.0)-keyColor)*0.5),0.0);
+            rgb=max(rgb-keyColor*spill*despill*(1.0-mask),float3(0.0));
+            return half4(rgb*c.a*mask,c.a*mask);
+        }"""
+
+    const val LumaKey = """
+        uniform shader content; uniform float threshold; uniform float softness; uniform float invert;
+        half4 main(float2 p) {
+            float4 c=content.eval(p);
+            float luminance=dot(c.rgb/max(c.a,0.0001),float3(0.2126,0.7152,0.0722));
+            float mask=smoothstep(threshold-softness,threshold+softness,luminance);
+            return half4(c*mix(mask,1.0-mask,invert));
         }"""
 
     const val RadialBlur = """
@@ -802,3 +841,4 @@ private object Shaders {
             return content.eval(p) * step(completion, h * 0.999 + 0.0005);
         }"""
 }
+

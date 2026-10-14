@@ -66,7 +66,7 @@ jobs:
           arch: x86_64
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
-          script: ./gradlew :app:connectedDebugAndroidTest --no-daemon --max-workers=2 --console=plain
+          script: bash .github/scripts/device-tests.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -74,4 +74,5 @@ jobs:
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
+            work-ui/
 

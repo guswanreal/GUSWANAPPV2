@@ -1,0 +1,6 @@
+grace_hopper.jpg is a test-only fixture from Google ML Kit samples:
+https://github.com/googlesamples/mlkit/blob/master/ios/quickstarts/vision/Resources/grace_hopper.jpg
+
+The Google ML Kit sample repository is distributed under Apache License 2.0.
+See LICENSE-MLKIT.txt in this directory. This image is not included in the application's main resources.
+

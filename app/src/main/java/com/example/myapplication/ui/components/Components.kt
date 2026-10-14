@@ -33,6 +33,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -68,6 +71,7 @@ fun Panel(
     content: @Composable () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
+    var focused by remember { mutableStateOf(false) }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.97f else 1f, spring(stiffness = Spring.StiffnessMediumLow), label = "panelScale")
     Box(
@@ -75,7 +79,8 @@ fun Panel(
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(shape)
             .background(color)
-            .border(1.dp, if (pressed) LineStrong else Line, shape)
+            .border(if(focused) 2.dp else 1.dp, if(focused) Accent else if (pressed) LineStrong else Line, shape)
+            .onFocusChanged { focused=it.isFocused }
             .then(
                 if (onClick != null) Modifier.clickable(interaction, LocalIndication.current, role = Role.Button, onClickLabel = onClickLabel, onClick = onClick)
                 else Modifier
@@ -96,6 +101,7 @@ fun ToolButton(
     size: Dp = 48.dp,
     enabled: Boolean = true,
 ) {
+    var focused by remember { mutableStateOf(false) }
     val bg by animateColorAsState(if (active) activeColor.copy(alpha = 0.18f) else Color.Transparent, tween(180), label = "toolBg")
     val fg by animateColorAsState(
         when {
@@ -106,9 +112,11 @@ fun ToolButton(
     )
     Box(
         modifier
-            .size(size)
+            .size(size.coerceAtLeast(44.dp))
             .clip(RoundedCornerShape(12.dp))
             .background(bg)
+            .border(if(focused) 2.dp else 0.dp,if(focused) Accent else Color.Transparent,RoundedCornerShape(12.dp))
+            .onFocusChanged { focused=it.isFocused }
             .clickable(enabled = enabled, role = Role.Button, onClickLabel = label, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -127,6 +135,7 @@ fun ActionButton(
     contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 11.dp),
 ) {
     val interaction = remember { MutableInteractionSource() }
+    var focused by remember { mutableStateOf(false) }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.96f else 1f, spring(stiffness = Spring.StiffnessMedium), label = "btnScale")
     val fg = if (primary) Ink950 else TextHigh
@@ -136,6 +145,8 @@ fun ActionButton(
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(RoundedCornerShape(10.dp))
             .background(if (primary) Accent else Ink700)
+            .border(if(focused) 2.dp else 0.dp,if(focused) TextHigh else Color.Transparent,RoundedCornerShape(10.dp))
+            .onFocusChanged { focused=it.isFocused }
             .then(if (primary) Modifier else Modifier.border(1.dp, Line, RoundedCornerShape(10.dp)))
             .clickable(interaction, LocalIndication.current, role = Role.Button, onClick = onClick)
             .padding(contentPadding),
@@ -262,3 +273,4 @@ fun ColorSwatch(color: Color, selected: Boolean, onClick: () -> Unit, label: Str
         )
     }
 }
+

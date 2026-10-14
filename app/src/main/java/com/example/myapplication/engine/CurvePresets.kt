@@ -44,3 +44,4 @@ fun Track.velocityAt(time: Float, default: Easing): Float {
     val lo=(t-d).coerceAtLeast(a.time); val hi=(t+d).coerceAtMost(b.time)
     return if (abs(hi-lo) < 1e-7f) 0f else (segmentValue(a,b,hi,easing)-segmentValue(a,b,lo,easing))/(hi-lo)
 }
+

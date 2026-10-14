@@ -16,3 +16,4 @@ Reading this as a composition workspace for mobile motion designers, with a comp
 - Keep real counts, offline processing status and actionable error text. Face depth is a relative estimate, not a metric reconstruction or a face mesh.
 
 Plan critique: retain the owner's existing orange identity, rather than changing the palette for novelty. The meaningful change is the workspace structure and curve interaction, with shorter chrome and accessible numeric controls.
+

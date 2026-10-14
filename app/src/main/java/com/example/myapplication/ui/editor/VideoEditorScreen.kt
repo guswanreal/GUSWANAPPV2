@@ -243,7 +243,7 @@ private fun EditorPanel.short(): String = when (this) {
 
 /** Panels that make sense for a layer type, in toolbar order. */
 private fun panelsFor(type: LayerType): List<EditorPanel> = buildList {
-    if (type == LayerType.Null) {
+    if (type == LayerType.Null || type == LayerType.Camera) {
         add(EditorPanel.Transform); add(EditorPanel.Graph); add(EditorPanel.Parent)
         return@buildList
     }
@@ -439,7 +439,9 @@ fun VideoEditorScreen(settings: ProjectSettings, template: Template?, onBack: ()
     }
     if (showAssistant) MotionAssistantSheet(state) { showAssistant=false }
     if (showEffects) {
-        EffectsBrowserSheet(onDismiss = { showEffects = false }) { type ->
+        EffectsBrowserSheet(onDismiss = { showEffects = false },layerType=state.selected?.type ?: LayerType.Shape,onPreset={
+            showEffects=false; state.addPreset(it)
+        }) { type ->
             showEffects = false
             state.addEffect(type)
         }

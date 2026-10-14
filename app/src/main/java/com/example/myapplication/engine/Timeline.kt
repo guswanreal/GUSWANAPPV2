@@ -218,6 +218,7 @@ enum class BlendKind(val label: String, val mode: BlendMode) {
 
 enum class FxCategory(val label: String) {
     Blur("Blur & Sharpen"), Color("Color Correction"), Distort("Distort"), Stylize("Stylize"), Generate("Generate"),
+    Keying("Keying"),
     Transition("Transition"), Time("Time"), Text("Text"), Particles("Particles"), Expression("Expression"),
 }
 
@@ -258,6 +259,12 @@ enum class FxType(val label: String, val category: FxCategory, val description: 
         listOf(FxParam("Blend With Original", 0f, 1f, 0f))),
     Posterize("Posterize", FxCategory.Color, "Kurangi jumlah tingkat warna",
         listOf(FxParam("Level", 2f, 16f, 5f))),
+    ColorBalance("Color Balance", FxCategory.Color, "Koreksi kanal merah, hijau dan biru secara terpisah",
+        listOf(FxParam("Red",-.5f,.5f,0f),FxParam("Green",-.5f,.5f,0f),FxParam("Blue",-.5f,.5f,0f))),
+    ChromaKey("Chroma Key", FxCategory.Keying, "Hapus warna latar dengan feather dan pengurangan spill",
+        listOf(FxParam("Key Hue",0f,360f,120f,"°"),FxParam("Threshold",0f,1f,.25f),FxParam("Softness",.001f,.5f,.08f),FxParam("Despill",0f,1f,.7f))),
+    LumaKey("Luma Key", FxCategory.Keying, "Hapus area gelap atau terang berdasarkan luminance",
+        listOf(FxParam("Threshold",0f,1f,.25f),FxParam("Softness",.001f,.5f,.05f),FxParam("Invert",0f,1f,0f))),
 
     WaveWarp("Wave Warp", FxCategory.Distort, "Gelombang yang bergerak",
         listOf(FxParam("Wave Height", 0f, 80f, 12f, "px"), FxParam("Wave Width", 10f, 400f, 120f, "px"), FxParam("Wave Speed", 0f, 10f, 2f))),
@@ -505,3 +512,4 @@ data class Template(
 object Templates {
     val all: List<Template> get() = TemplateLibrary.all
 }
+
