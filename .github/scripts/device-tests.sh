@@ -23,7 +23,7 @@ run_tests landscape -e qaOrientation landscape -e class com.example.myapplicatio
 adb shell wm user-rotation lock 0
 adb shell settings put system font_scale 2.0
 run_tests large-type -e qaOrientation portrait -e class com.example.myapplication.EditorWorkspaceUiTest || result=$?
-for screen in editor graph; do
+for screen in editor graph effects; do
   for viewport in portrait landscape; do
     for type in default large-type; do
       name="$screen-$viewport-$type.png"
@@ -35,4 +35,3 @@ for screen in editor graph; do
 done
 adb logcat -d -v threadtime -s AndroidRuntime:E GuswanFx:E EditorUiQa:I TestRunner:I > work-ui/runtime-log.txt
 exit "$result"
-

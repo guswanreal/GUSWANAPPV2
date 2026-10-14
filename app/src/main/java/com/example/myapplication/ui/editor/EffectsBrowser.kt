@@ -14,6 +14,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -39,6 +43,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -74,6 +81,8 @@ internal fun EffectsBrowserSheet(onDismiss: () -> Unit, layerType:LayerType=Laye
         var query by remember { mutableStateOf("") }
         var category by remember { mutableStateOf<FxCategory?>(null) }
         var presets by remember { mutableStateOf(false) }
+        val keyboardVisible=WindowInsets.ime.getBottom(LocalDensity.current)>0
+        val keyboard=LocalSoftwareKeyboardController.current
         val measurer = rememberTextMeasurer(COMPOSITION_TEXT_CACHE)
         val q = query.trim()
         val matches = FxType.entries.filter { t ->
@@ -81,11 +90,11 @@ internal fun EffectsBrowserSheet(onDismiss: () -> Unit, layerType:LayerType=Laye
                 (q.isEmpty() || t.label.contains(q, true) || t.description.contains(q, true) || t.category.label.contains(q, true))
         }
         Column(Modifier.fillMaxHeight(0.92f)) {
-            Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+            if(!keyboardVisible) Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Effects & Presets", style = MaterialTheme.typography.titleLarge, color = TextHigh, modifier = Modifier.weight(1f))
                 Text("${FxType.entries.count { it.appliesTo(layerType) }} efek", style = MonoLabel, color = TextLow)
             }
-            if(onPreset!=null) Row(Modifier.padding(horizontal=16.dp,vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+            if(onPreset!=null && !keyboardVisible) Row(Modifier.padding(horizontal=16.dp,vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 ChoiceChip("Efek",!presets) { presets=false }
                 ChoiceChip("Preset stack",presets) { presets=true }
             }
@@ -93,13 +102,15 @@ internal fun EffectsBrowserSheet(onDismiss: () -> Unit, layerType:LayerType=Laye
                 value = query,
                 onValueChange = { query = it },
                 singleLine = true,
+                keyboardOptions=KeyboardOptions(imeAction=ImeAction.Search),
+                keyboardActions=KeyboardActions(onSearch={keyboard?.hide()}),
                 leadingIcon = { Icon(Icons.Rounded.Search, null, tint = TextMid) },
                 placeholder = { Text("Cari: blur, glow, wipe, glitch…", color = TextLow) },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Accent, unfocusedBorderColor = LineStrong),
             )
-            if(!presets) LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if(!presets && !keyboardVisible) LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item { ChoiceChip("Semua", category == null) { category = null } }
                 items(FxCategory.entries, key = { it.name }) { c -> ChoiceChip(c.label, category == c) { category = c } }
             }
@@ -175,4 +186,3 @@ private fun sampleLayers(type: FxType): List<Layer> = listOf(
         effects = listOf(EffectInstance.of(type, 1)),
     ),
 )
-

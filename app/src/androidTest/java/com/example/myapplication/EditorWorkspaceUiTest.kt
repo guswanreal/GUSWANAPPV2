@@ -43,7 +43,7 @@ class EditorWorkspaceUiTest {
         android.util.Log.i("EditorUiQa","Editor content ready")
     }
     private fun capture(name:String) {
-        val bitmap=compose.onRoot().captureToImage().asAndroidBitmap()
+        val bitmap=compose.onAllNodes(isRoot()).onLast().captureToImage().asAndroidBitmap()
         val orientation=if(bitmap.width>bitmap.height) "landscape" else "portrait"
         org.junit.Assert.assertEquals(InstrumentationRegistry.getArguments().getString("qaOrientation") ?: "portrait",orientation)
         val scale=context.resources.configuration.fontScale
@@ -114,7 +114,10 @@ class EditorWorkspaceUiTest {
         for(name in listOf("Color Balance","Chroma Key","Luma Key")) {
             compose.onNodeWithText("Tambah efek").performScrollTo().performClick()
             compose.onNode(hasSetTextAction()).performTextReplacement(name)
-            compose.onNode(hasText(name) and !hasSetTextAction()).performScrollTo().performClick()
+            compose.onNode(hasSetTextAction()).performImeAction()
+            compose.onNodeWithTag("effects-list").performScrollToNode(hasText(name) and !hasSetTextAction())
+            if(name=="Color Balance") capture("effects")
+            compose.onNode(hasText(name) and !hasSetTextAction()).performClick()
             compose.onNodeWithText(name).assertExists()
             android.util.Log.i("EditorUiQa","Added $name")
         }
@@ -158,4 +161,3 @@ class EditorWorkspaceUiTest {
         } finally { bitmap.recycle(); directory.deleteRecursively() }
     }
 }
-
