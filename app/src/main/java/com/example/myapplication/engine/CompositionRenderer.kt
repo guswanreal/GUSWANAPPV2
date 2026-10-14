@@ -74,6 +74,7 @@ fun DrawScope.drawComposition(
     frames: FrameSource = FootageFrames,
     fps: Int = FPS,
 ) {
+    if(!size.width.isFinite() || !size.height.isFinite() || size.width<=0f || size.height<=0f) return
     drawRect(background)
     // Reading the frame cache's version makes the preview redraw when a proxy frame arrives.
     if (frames === FootageFrames && layers.any { it.footage != null }) FootageFrames.version
@@ -189,7 +190,20 @@ private fun Scene.cameraAt(t: Float): CamState? {
     } else {
         Offset(size.width / 2f, size.height / 2f) + offset
     }
-    return CamState(poi, cam.value(Prop.Scale, t).coerceAtLeast(0.05f), cam.value(Prop.Rotation, t), cam.value(Prop.OrbitX, t), cam.value(Prop.OrbitY, t))
+    val zoom=cam.value(Prop.Scale,t).coerceAtLeast(.05f)
+    if(cam.parentId==null && cam.spatialOffset.isEmpty())
+        return CamState(poi,zoom,cam.value(Prop.Rotation,t),cam.value(Prop.OrbitX,t),cam.value(Prop.OrbitY,t))
+    val rig=space(t).cameraRigMatrix()
+    val scale=kotlin.math.sqrt(rig[0]*rig[0]+rig[1]*rig[1]+rig[2]*rig[2]).coerceAtLeast(.001f)
+    val x=(poi.x-size.width/2)/size.height; val y=(poi.y-size.height/2)/size.height
+    val point=Offset(size.width/2+(rig[0]*x+rig[4]*y+rig[12])*size.height,
+        size.height/2+(rig[1]*x+rig[5]*y+rig[13])*size.height)
+    val degrees=180f/PI.toFloat()
+    val roll=atan2(rig[1],rig[0])*degrees
+    val yaw=kotlin.math.asin((-rig[2]/scale).coerceIn(-1f,1f))*degrees
+    val pitch=atan2(rig[6],rig[10])*degrees
+    val rigZoom=zoom/(scale-rig[14]*zoom/.8660254f).coerceAtLeast(.05f)
+    return CamState(point,rigZoom,cam.value(Prop.Rotation,t)+roll,cam.value(Prop.OrbitX,t)+pitch,cam.value(Prop.OrbitY,t)+yaw)
 }
 
 /** Comp → screen for a layer at its Position Z: farther layers shrink and move less (parallax). */
@@ -605,3 +619,4 @@ fun screenToFootage(layers: List<Layer>, layerId: Int, t: Float, size: Size, poi
     val u = local.x / fit.width + 0.5f; val v = local.y / fit.height + 0.5f
     return if (u in 0f..1f && v in 0f..1f) Offset(u, v) else null
 }
+

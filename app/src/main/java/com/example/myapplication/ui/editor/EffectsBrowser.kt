@@ -14,6 +14,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -38,6 +42,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
@@ -51,6 +62,8 @@ import com.example.myapplication.engine.LayerType
 import com.example.myapplication.engine.Prop
 import com.example.myapplication.engine.ShapeKind
 import com.example.myapplication.engine.Track
+import com.example.myapplication.engine.EffectPreset
+import com.example.myapplication.engine.EffectPresets
 import com.example.myapplication.engine.drawComposition
 import com.example.myapplication.ui.theme.Accent
 import com.example.myapplication.ui.theme.Blue
@@ -65,43 +78,69 @@ import com.example.myapplication.ui.theme.TextMid
 /** After Effects' "Effects & Presets" panel as a searchable sheet with rendered previews. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun EffectsBrowserSheet(onDismiss: () -> Unit, onPick: (FxType) -> Unit) {
+internal fun EffectsBrowserSheet(onDismiss: () -> Unit, layerType:LayerType=LayerType.Shape, onPreset:((EffectPreset)->Unit)?=null, onPick: (FxType) -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Ink850, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         var query by remember { mutableStateOf("") }
         var category by remember { mutableStateOf<FxCategory?>(null) }
+        var presets by remember { mutableStateOf(false) }
+        val keyboardVisible=WindowInsets.ime.getBottom(LocalDensity.current)>0
+        val keyboard=LocalSoftwareKeyboardController.current
+        val focus=LocalFocusManager.current
+        val shortLandscape=LocalConfiguration.current.let { it.screenWidthDp>it.screenHeightDp*1.35f && it.screenHeightDp<520 }
         val measurer = rememberTextMeasurer(COMPOSITION_TEXT_CACHE)
         val q = query.trim()
         val matches = FxType.entries.filter { t ->
-            (category == null || t.category == category) &&
+            t.appliesTo(layerType) && (category == null || t.category == category) &&
                 (q.isEmpty() || t.label.contains(q, true) || t.description.contains(q, true) || t.category.label.contains(q, true))
         }
         Column(Modifier.fillMaxHeight(0.92f)) {
-            Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+            if(!keyboardVisible && !shortLandscape) Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Effects & Presets", style = MaterialTheme.typography.titleLarge, color = TextHigh, modifier = Modifier.weight(1f))
-                Text("${FxType.entries.size} efek", style = MonoLabel, color = TextLow)
+                Text("${FxType.entries.count { it.appliesTo(layerType) }} efek", style = MonoLabel, color = TextLow)
+            }
+            if(onPreset!=null && !keyboardVisible) Row(Modifier.padding(horizontal=16.dp,vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                ChoiceChip("Efek",!presets) { presets=false }
+                ChoiceChip("Preset stack",presets) { presets=true }
             }
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
                 singleLine = true,
+                keyboardOptions=KeyboardOptions(imeAction=ImeAction.Search),
+                keyboardActions=KeyboardActions(onSearch={focus.clearFocus();keyboard?.hide()}),
                 leadingIcon = { Icon(Icons.Rounded.Search, null, tint = TextMid) },
                 placeholder = { Text("Cari: blur, glow, wipe, glitch…", color = TextLow) },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Accent, unfocusedBorderColor = LineStrong),
             )
-            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                item { ChoiceChip("Semua", category == null) { category = null } }
-                items(FxCategory.entries, key = { it.name }) { c -> ChoiceChip(c.label, category == c) { category = c } }
-            }
-            LazyColumn(contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp)) {
-                matches.groupBy { it.category }.forEach { (cat, types) ->
+            if(!presets && !keyboardVisible && !shortLandscape) CategoryFilters(category) {category=it}
+            LazyColumn(modifier=Modifier.testTag("effects-list"),contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp)) {
+                if(!presets && !keyboardVisible && shortLandscape) item(key="categories") {CategoryFilters(category) {category=it}}
+                if(presets && onPreset!=null) {
+                    val found=EffectPresets.filter { it.appliesTo(layerType) && (q.isEmpty() || it.name.contains(q,true) || it.description.contains(q,true) || it.types.any { t -> t.label.contains(q,true) }) }
+                    items(found,key={it.id}) { preset ->
+                        var focused by remember { mutableStateOf(false) }
+                        Row(Modifier.fillMaxWidth().heightIn(min=80.dp)
+                            .border(if(focused) 2.dp else 0.dp,if(focused) TextHigh else androidx.compose.ui.graphics.Color.Transparent)
+                            .onFocusChanged { focused=it.isFocused }
+                            .clickable(onClickLabel="Tambah preset ${preset.name}") { onPreset(preset) }.padding(horizontal=20.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(preset.name,style=MaterialTheme.typography.titleMedium,color=TextHigh)
+                                Text(preset.description,style=MaterialTheme.typography.bodySmall,color=TextMid)
+                                Text(preset.types.joinToString { it.label },style=MaterialTheme.typography.labelSmall,color=TextLow)
+                            }
+                            Icon(Icons.Rounded.Add,null,tint=Accent)
+                        }
+                    }
+                    if(found.isEmpty()) item { Text("Preset tidak ditemukan. Ubah kata pencarian.",color=TextMid,modifier=Modifier.padding(20.dp)) }
+                } else matches.groupBy { it.category }.forEach { (cat, types) ->
                     item(key = "h-${cat.name}") {
-                        Text(cat.label.uppercase(), style = MonoLabel, color = TextLow, modifier = Modifier.padding(start = 20.dp, top = 14.dp, bottom = 4.dp))
+                        Text(cat.label, style = MaterialTheme.typography.labelLarge, color = TextMid, modifier = Modifier.padding(start = 20.dp, top = 14.dp, bottom = 4.dp))
                     }
                     items(types, key = { it.name }) { t -> EffectRow(t, measurer) { onPick(t) } }
                 }
-                if (matches.isEmpty()) {
+                if (!presets && matches.isEmpty()) {
                     item { Text("Tidak ada efek yang cocok dengan \"$q\".", style = MaterialTheme.typography.bodyMedium, color = TextMid, modifier = Modifier.padding(20.dp)) }
                 }
             }
@@ -110,12 +149,23 @@ internal fun EffectsBrowserSheet(onDismiss: () -> Unit, onPick: (FxType) -> Unit
 }
 
 @Composable
+private fun CategoryFilters(category:FxCategory?,onPick:(FxCategory?)->Unit) {
+    LazyRow(contentPadding=PaddingValues(horizontal=16.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+        item {ChoiceChip("Semua",category==null) {onPick(null)}}
+        items(FxCategory.entries,key={it.name}) {c->ChoiceChip(c.label,category==c) {onPick(c)}}
+    }
+}
+
+@Composable
 private fun EffectRow(type: FxType, measurer: TextMeasurer, onClick: () -> Unit) {
     val sample = remember(type) { sampleLayers(type) }
+    var focused by remember { mutableStateOf(false) }
     Row(
         Modifier
             .fillMaxWidth()
             .heightIn(min = 72.dp)
+            .border(if(focused) 2.dp else 0.dp,if(focused) TextHigh else androidx.compose.ui.graphics.Color.Transparent)
+            .onFocusChanged { focused=it.isFocused }
             .clickable(role = Role.Button, onClickLabel = "Tambah ${type.label}", onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,

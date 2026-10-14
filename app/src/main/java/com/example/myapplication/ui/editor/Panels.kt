@@ -60,6 +60,10 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.myapplication.engine.BlendKind
@@ -115,7 +119,7 @@ internal fun TransformPanel(state: EditorState, layer: Layer) {
             },
         ) {
             // The engine's list per layer type, so the panel matches what the renderer and keyframes use.
-            if (layer.supports3D()) {
+            if (layer.supports3D() && layer.type != LayerType.Camera) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("Mode 3D", color = TextHigh, modifier = Modifier.weight(1f))
                     androidx.compose.material3.Switch(checked = layer.is3D, onCheckedChange = { enabled ->
@@ -125,6 +129,10 @@ internal fun TransformPanel(state: EditorState, layer: Layer) {
                 if (layer.is3D) PanelHint("Putar bidang pada sumbu X/Y, atur kedalaman Z, lalu gerakkan layer Kamera.")
             }
             layer.transformProperties().forEach { PropertyRow(state, layer, PropKey.T(it)) }
+            if(layer.type==LayerType.Camera) {
+                PanelHint("Hubungkan kamera ke Null 3D melalui Parent untuk menggerakkan seluruh rig. Zoom tetap dikendalikan oleh kamera.")
+                ActionButton("Buat Null pengendali kamera",state::createCameraRig,primary=false)
+            }
             if (layer.type == LayerType.Model3D) PanelHint("Rotation pada layer 3D memutar model di sumbu Y.")
         }
         Panel(Modifier.fillMaxWidth()) {
@@ -280,9 +288,12 @@ internal fun BlendingPanel(state: EditorState, layer: Layer) {
         }
         Panel(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(vertical = 4.dp)) {
-                SwitchRow(if (layer.visible) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, "Video (tampil)", layer.visible) { state.toggleVisible(layer.id) }
+                SwitchRow(if (layer.visible) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, "Tampilkan layer", layer.visible) { state.toggleVisible(layer.id) }
                 SwitchRow(Icons.Rounded.FilterCenterFocus, "Solo", layer.solo) { state.toggleSolo(layer.id) }
                 SwitchRow(if (layer.locked) Icons.Rounded.Lock else Icons.Rounded.LockOpen, "Kunci", layer.locked) { state.toggleLock(layer.id) }
+                SwitchRow(Icons.Rounded.FilterCenterFocus,"Abaikan kamera komposisi",layer.cameraIgnore) {
+                    state.updateSelected { it.copy(cameraIgnore=!it.cameraIgnore) }
+                }
             }
         }
     }
@@ -290,6 +301,7 @@ internal fun BlendingPanel(state: EditorState, layer: Layer) {
 
 @Composable
 internal fun ChoiceChip(text: String, selected: Boolean, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
     val bg by animateColorAsState(if (selected) Accent.copy(alpha = 0.18f) else Ink700, tween(160), label = "chipBg")
     val border by animateColorAsState(if (selected) Accent else Color.Transparent, tween(160), label = "chipBorder")
     Text(
@@ -297,10 +309,12 @@ internal fun ChoiceChip(text: String, selected: Boolean, onClick: () -> Unit) {
         style = MaterialTheme.typography.labelMedium,
         color = if (selected) TextHigh else TextMid,
         modifier = Modifier
-            .heightIn(min = 40.dp)
+            .heightIn(min = 44.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(bg)
-            .border(1.dp, border, RoundedCornerShape(10.dp))
+            .border(if(focused) 2.dp else 1.dp,if(focused) TextHigh else border,RoundedCornerShape(10.dp))
+            .onFocusChanged { focused=it.isFocused }
+            .semantics { this.selected=selected }
             .clickable(role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 11.dp),
     )
@@ -326,10 +340,13 @@ private fun SwitchRow(icon: ImageVector, label: String, on: Boolean, onClick: ()
 internal fun ParentPanel(state: EditorState, layer: Layer) {
     Panel(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(vertical = 6.dp)) {
-            PanelHint("Child mengikuti Position, Anchor, Rotation, dan Scale parent. Tampilan pada playhead tetap saat mengganti atau melepas parent.")
-            PanelHint("Gunakan Null Object untuk menggerakkan beberapa layer bersama.")
-            state.parentError?.let { Text(it, color = Danger, modifier = Modifier.padding(12.dp)) }
             ParentRow(null, "Tidak ada", Icons.Rounded.LinkOff, null, layer.parentId == null) { state.setParent(null) }
+            PanelHint("Child mengikuti Position, Anchor, Rotation, dan Scale parent. Tampilan pada playhead tetap saat mengganti atau melepas parent.")
+            PanelHint(if(layer.type==LayerType.Camera) "Kamera dapat dihubungkan ke Null. Position, Rotation dan Scale Null menggerakkan rig kamera 3D." else "Gunakan Null Object untuk menggerakkan beberapa layer bersama.")
+            state.parentError?.let { Text(it, color = Danger, modifier = Modifier.padding(12.dp)) }
+            if(layer.parentId!=null && layer.type!=LayerType.Camera) {
+                ActionButton("Pusatkan pada parent",state::centerOnParent,primary=false,modifier=Modifier.fillMaxWidth().padding(12.dp))
+            }
             state.parentCandidates().forEach { p ->
                 ParentRow(p.color, p.name, null, p.type.label, layer.parentId == p.id) { state.setParent(p.id) }
             }
@@ -456,9 +473,12 @@ private fun ModelTile(id: String?, name: String, active: Boolean, onClick: () ->
 @Composable
 internal fun PanelTitle(panel: EditorPanel, layer: Layer) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(panel.label, style = MaterialTheme.typography.titleMedium, color = TextHigh, modifier = Modifier.weight(1f))
-        Box(Modifier.size(8.dp).clip(CircleShape).background(layer.color))
-        Spacer(Modifier.width(6.dp))
-        Text(layer.name, style = MonoLabel, color = TextMid, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 160.dp))
+        Text(panel.label, style = MaterialTheme.typography.titleMedium, color = TextHigh, modifier = Modifier.weight(1f),maxLines=1,overflow=TextOverflow.Ellipsis)
+        if(LocalDensity.current.fontScale<1.5f) {
+            Box(Modifier.size(8.dp).clip(CircleShape).background(layer.color))
+            Spacer(Modifier.width(6.dp))
+            Text(layer.name, style = MonoLabel, color = TextMid, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 160.dp))
+        }
     }
 }
+

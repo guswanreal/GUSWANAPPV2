@@ -29,6 +29,13 @@ import com.example.myapplication.engine.canParentLayer
 import com.example.myapplication.engine.reparentLayer
 import com.example.myapplication.engine.ProjectSnapshot
 import com.example.myapplication.engine.CameraSolve3D
+import com.example.myapplication.engine.CurvePreset
+import com.example.myapplication.engine.Handle
+import com.example.myapplication.engine.segmentHandles
+import com.example.myapplication.engine.FaceSolve3D
+import com.example.myapplication.engine.FacePose3D
+import com.example.myapplication.engine.EffectPreset
+import com.example.myapplication.engine.footageToScreen
 import com.example.myapplication.ui.theme.LayerColors
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -36,7 +43,7 @@ import kotlin.math.roundToInt
 /** Panels opened from the editor's bottom toolbar, Alight Motion style. */
 enum class EditorPanel(val label: String) {
     Transform("Transform"), Effects("Effect Controls"), Graph("Graph Editor"), Color("Warna"),
-    Blending("Blending & Opacity"), Parent("Parent & Link"), Text("Teks"), Shape("Bentuk"), Model("Model 3D"), Tracker("Tracking Kamera 3D"),
+    Blending("Blending & Opacity"), Parent("Parent & Link"), Text("Teks"), Shape("Bentuk"), Model("Model 3D"), Tracker("Tracking"),
 }
 
 class EditorState(val settings: ProjectSettings, template: Template?, restored: ProjectSnapshot? = null,
@@ -53,6 +60,7 @@ class EditorState(val settings: ProjectSettings, template: Template?, restored: 
     var time by mutableFloatStateOf(restored?.time ?: 0f)
     var playing by mutableStateOf(false)
     var loop by mutableStateOf(true)
+    var showGuides by mutableStateOf(false)
 
     var panel by mutableStateOf<EditorPanel?>(null)
     var parentError by mutableStateOf<String?>(null)
@@ -90,6 +98,29 @@ class EditorState(val settings: ProjectSettings, template: Template?, restored: 
         commit(layers.map { if(it.id==videoId) it.copy(cameraIgnore=true) else it }+camera+nullLayer)
     }
 
+    fun applyFaceSolve(videoId: Int, solve: FaceSolve3D) {
+        val video=layers.firstOrNull { it.id==videoId } ?: return
+        require(solve.poses.size>=3)
+        val id=(layers.maxOfOrNull { it.id } ?: 0)+1
+        val reference=solve.poses.first().width.coerceAtLeast(.01f)
+        val source=video.copy(cameraIgnore=true,faceSolve=solve)
+        val scene=layers.map { if(it.id==videoId) source else it }
+        val size=Size(settings.width.toFloat(),settings.height.toFloat())
+        val positions=solve.poses.map { p -> footageToScreen(scene,videoId,p.time,size,p.x,p.y) ?: Offset(size.width/2,size.height/2) }
+        fun track(value: (FacePose3D,Int)->Float)=Track(0f,solve.poses.mapIndexed { i,p -> Keyframe(p.time,value(p,i),Easing.Linear) })
+        fun distance(p:FacePose3D)=(reference/p.width.coerceAtLeast(.01f)).coerceIn(.25f,4f)
+        val rig=Layer(id,"Face Null 3D",LayerType.Null,video.color,solve.poses.first().time,solve.poses.last().time,
+            is3D=true,cameraIgnore=true,easing=Easing.Linear,faceSolve=solve)
+            .withTrack(Prop.PosX,track { p,i -> (positions[i].x/size.width*2-1)*distance(p) })
+            .withTrack(Prop.PosY,track { p,i -> (positions[i].y/size.height*2-1)*distance(p) })
+            .withTrack(Prop.PosZ,track { p,_ -> (.8660254f*(distance(p)-1)).coerceAtLeast(-.7f) })
+            .withTrack(Prop.OrbitX,track { p,_ -> p.pitch })
+            .withTrack(Prop.OrbitY,track { p,_ -> p.yaw })
+            .withTrack(Prop.Rotation,track { p,_ -> p.roll })
+        commit(scene+rig)
+        select(id); panel=EditorPanel.Transform
+    }
+
     /** Templates are authored for 10 s; clips that run to their end are stretched to fill the project. */
     private fun fitToDuration(l: Layer): Layer = when {
         l.end >= DemoProjects.DURATION - 1e-3f || l.end > duration -> l.copy(end = duration, start = l.start.coerceAtMost(duration - 5 * frame))
@@ -98,6 +129,7 @@ class EditorState(val settings: ProjectSettings, template: Template?, restored: 
 
     /** Applies an edit. Edits sharing a [coalesce] key in quick succession (drags) form one undo step. */
     fun commit(newLayers: List<Layer>, coalesce: String? = null) {
+        if (newLayers == layers) return
         val now = System.currentTimeMillis()
         val merge = coalesce != null && coalesce == lastCoalesce && now - lastCommitAt < 800
         if (!merge) {
@@ -134,7 +166,9 @@ class EditorState(val settings: ProjectSettings, template: Template?, restored: 
         selectedId = id
         parentError = null
         graphKeyIndex = null
-        if (id == null) panel = null
+        val type=selected?.type
+        if(type==null) panel=null
+        else if(panel!=null && panel !in panelsFor(type)) panel=EditorPanel.Transform
         save()
     }
 
@@ -155,9 +189,14 @@ class EditorState(val settings: ProjectSettings, template: Template?, restored: 
     }
 
     /** Sets a value at the playhead; writes a keyframe when the property's stopwatch is on. */
-    fun setValue(key: PropKey, value: Float) = updateSelected("value-$key-$selectedId") { l ->
-        val tr = l.trackOf(key) ?: return@updateSelected l
-        l.withTrackOf(key, tr.withValueAt(snap(time), value))
+    fun setValue(key: PropKey, value: Float) {
+        if(!value.isFinite() || selected?.trackOf(key)==null) return
+        playing=false
+        time=snap(time)
+        updateSelected("value-$key-$selectedId") { l ->
+            val tr = l.trackOf(key) ?: return@updateSelected l
+            l.withTrackOf(key, tr.withValueAt(time, value))
+        }
     }
 
     /** After Effects' stopwatch: on records the first keyframe, off clears them and keeps the current value. */
@@ -199,8 +238,9 @@ class EditorState(val settings: ProjectSettings, template: Template?, restored: 
     fun moveKey(key: PropKey, index: Int, newTime: Float, newValue: Float) = updateSelected("graph-$key-$index") { l ->
         val tr = l.trackOf(key) ?: return@updateSelected l
         val k = tr.keys.getOrNull(index) ?: return@updateSelected l
-        val lo = tr.keys.getOrNull(index - 1)?.time?.plus(frame) ?: 0f
-        val hi = tr.keys.getOrNull(index + 1)?.time?.minus(frame) ?: duration
+        if (!newTime.isFinite() || !newValue.isFinite()) return@updateSelected l
+        val lo = tr.keys.getOrNull(index - 1)?.time?.plus(KEY_EPS * 1.01f) ?: 0f
+        val hi = tr.keys.getOrNull(index + 1)?.time?.minus(KEY_EPS * 1.01f) ?: duration
         val t = snap(newTime).coerceIn(lo, hi.coerceAtLeast(lo))
         l.withTrackOf(key, tr.copy(keys = tr.keys.toMutableList().apply { set(index, k.copy(time = t, value = newValue)) }))
     }
@@ -223,19 +263,53 @@ class EditorState(val settings: ProjectSettings, template: Template?, restored: 
         l.withTrackOf(key, tr.copy(loop = loop))
     }
 
+    fun applyCurve(key: PropKey, index: Int?, curve: CurvePreset) = updateSelected {
+        val tr = it.trackOf(key) ?: return@updateSelected it
+        it.withTrackOf(key, curve.apply(tr, index?.coerceAtMost(tr.keys.lastIndex-1)))
+    }
+
+    fun setBezierHandle(key: PropKey, segment: Int, outgoing: Boolean, influence: Float, speed: Float) =
+        updateSelected("handle-$key-$segment-$outgoing") { l ->
+            if (!influence.isFinite() || !speed.isFinite()) return@updateSelected l
+            val tr=l.trackOf(key) ?: return@updateSelected l
+            val a=tr.keys.getOrNull(segment) ?: return@updateSelected l
+            val b=tr.keys.getOrNull(segment+1) ?: return@updateSelected l
+            val handles=segmentHandles(a,b,a.easing ?: l.easing) ?: (Handle(1f/3,0f) to Handle(1f/3,0f))
+            val out=if(outgoing) Handle(influence.coerceIn(.001f,1f),speed) else handles.first
+            val incoming=if(!outgoing) Handle(influence.coerceIn(.001f,1f),speed) else handles.second
+            l.withTrackOf(key,tr.copy(keys=tr.keys.toMutableList().apply {
+                set(segment,a.copy(easing=Easing.Bezier,outInfluence=out.influence,outSpeed=out.speed))
+                set(segment+1,b.copy(inInfluence=incoming.influence,inSpeed=incoming.speed))
+            }))
+        }
+
+    fun createCameraRig() {
+        val camera=selected?.takeIf { it.type==LayerType.Camera } ?: return
+        val id=(layers.maxOfOrNull { it.id } ?: 0)+1
+        val rig=Layer(id,"Camera Rig",LayerType.Null,camera.color,0f,duration,is3D=true)
+        val next=layers+rig
+        val linked=reparentLayer(next,camera.id,rig.id,time,Size(settings.width.toFloat(),settings.height.toFloat()))
+        commit(next.map { if(it.id==camera.id) linked else it })
+        select(id)
+        panel=EditorPanel.Transform
+    }
+
     // ---------------------------------------------------------------- Direct manipulation in the preview
 
     /** One-finger drag moves, pinch scales, two-finger twist rotates the selected layer. */
     fun transformSelected(pan: Offset, zoom: Float, rotation: Float, size: Size) {
         val l = selected ?: return
         if (l.locked || l.type == LayerType.Gradient) return
-        val d = screenDeltaToParentSpace(layers, l.id, time, size, pan)
         val t = snap(time)
+        time = t
+        val d = screenDeltaToParentSpace(layers, l.id, t, size, pan)
         var next = l
-        fun put(p: Prop, v: Float) { next = next.withTrack(p, next.track(p).withValueAt(t, v.coerceIn(p.min, p.max))) }
+        fun put(p: Prop, v: Float) {
+            if (v.isFinite()) next = next.withTrack(p, next.track(p).withValueAt(t, if(p==Prop.Scale) v.coerceIn(.001f,p.max) else v))
+        }
         if (d != Offset.Zero) {
-            put(Prop.PosX, l.value(Prop.PosX, time) + d.x / (size.width / 2f))
-            put(Prop.PosY, l.value(Prop.PosY, time) + d.y / (size.height / 2f))
+            put(Prop.PosX, l.value(Prop.PosX, t) + d.x / (size.width / 2f))
+            put(Prop.PosY, l.value(Prop.PosY, t) + d.y / (size.height / 2f))
         }
         if (zoom != 1f) put(Prop.Scale, l.value(Prop.Scale, time) * zoom)
         if (rotation != 0f) put(Prop.Rotation, l.value(Prop.Rotation, time) + rotation)
@@ -247,10 +321,20 @@ class EditorState(val settings: ProjectSettings, template: Template?, restored: 
     private fun nextEffectUid() = (layers.flatMap { it.effects }.maxOfOrNull { it.uid } ?: 1000) + 1
 
     fun addEffect(type: FxType) {
+        if (selected?.let { type.appliesTo(it.type) } != true) return
         val uid = nextEffectUid()
         updateSelected { it.copy(effects = it.effects + EffectInstance.of(type, uid)) }
         expandedFx = expandedFx + uid
         panel = EditorPanel.Effects
+    }
+
+    fun addPreset(preset: EffectPreset) {
+        val layer=selected ?: return
+        if(!preset.appliesTo(layer.type)) return
+        val added=preset.build(layer,time,nextEffectUid())
+        updateSelected { it.copy(effects=it.effects+added) }
+        expandedFx=expandedFx+added.map { it.uid }
+        panel=EditorPanel.Effects
     }
 
     fun removeEffect(uid: Int) = updateSelected { l -> l.copy(effects = l.effects.filterNot { it.uid == uid }) }
@@ -282,10 +366,18 @@ class EditorState(val settings: ProjectSettings, template: Template?, restored: 
         try {
             val next = reparentLayer(layers, layer.id, parentId, time,
                 Size(settings.width.toFloat(), settings.height.toFloat()))
-            updateSelected { next }
+            val faceParent=layers.firstOrNull { it.id==parentId }?.let { it.type==LayerType.Null && it.faceSolve!=null } == true
+            updateSelected { if(faceParent) next.copy(cameraIgnore=true) else next }
         } catch (e: IllegalArgumentException) {
             parentError = e.message
         }
+    }
+
+    fun centerOnParent() = updateSelected { layer ->
+        if(layer.parentId==null || layer.locked) return@updateSelected layer
+        var next=layer.copy(parentOffset=com.example.myapplication.engine.ParentOffset(),spatialOffset=emptyList())
+        for(p in listOf(Prop.PosX,Prop.PosY,Prop.PosZ)) next=next.withTrack(p,next.track(p).withValueAt(snap(time),0f))
+        next
     }
 
     fun setBlend(blend: BlendKind) = updateSelected { it.copy(blend = blend) }
@@ -364,10 +456,15 @@ class EditorState(val settings: ProjectSettings, template: Template?, restored: 
 
     /** Trims a clip's in or out point, keeping at least a few frames. */
     fun trim(id: Int, startDelta: Float, endDelta: Float) = updateLayer(id, "trim-$id") { l ->
-        val minLen = 5 * frame
+        val minLen = minOf(5 * frame,l.end-l.start).coerceAtLeast(KEY_EPS)
+        val video=l.footage?.takeUnless { it.isImage }
+        val minStart=if(video==null) 0f else (l.start-l.sourceIn).coerceAtLeast(0f)
+        val maxEnd=if(video==null) duration else minOf(duration,l.start+video.duration-l.sourceIn)
+        val start=(l.start+startDelta).coerceIn(minStart,(l.end-minLen).coerceAtLeast(minStart))
         l.copy(
-            start = (l.start + startDelta).coerceIn(0f, l.end - minLen),
-            end = (l.end + endDelta).coerceIn(l.start + minLen, duration),
+            start = start,
+            end = (l.end + endDelta).coerceIn(start+minLen,maxEnd.coerceAtLeast(start+minLen)),
+            sourceIn = if(video!=null) (l.sourceIn+start-l.start).coerceAtLeast(0f) else l.sourceIn,
         )
     }
 
@@ -386,3 +483,4 @@ fun formatTimecode(t: Float, fps: Int): String {
     val digits = if (fps > 99) "%03d" else "%02d"
     return "%02d:%02d:".format(s / 60, s % 60) + digits.format(f)
 }
+

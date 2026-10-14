@@ -8,13 +8,13 @@ private val GuswanColorScheme = darkColorScheme(
     primary = Accent,
     onPrimary = Ink950,
     primaryContainer = AccentDeep,
-    onPrimaryContainer = TextHigh,
+    onPrimaryContainer = Ink950,
     secondary = Blue,
-    onSecondary = TextHigh,
-    secondaryContainer = BlueDeep,
+    onSecondary = Ink950,
+    secondaryContainer = Ink700,
     onSecondaryContainer = TextHigh,
     tertiary = Violet,
-    onTertiary = TextHigh,
+    onTertiary = Ink950,
     background = Ink900,
     onBackground = TextHigh,
     surface = Ink850,
@@ -29,7 +29,7 @@ private val GuswanColorScheme = darkColorScheme(
     outline = LineStrong,
     outlineVariant = Line,
     error = Danger,
-    onError = TextHigh,
+    onError = Ink950,
 )
 
 /** Guswaneditor is a dark-only creative tool, like most pro video/3D software. */
@@ -41,3 +41,4 @@ fun MyApplicationTheme(content: @Composable () -> Unit) {
         content = content
     )
 }
+

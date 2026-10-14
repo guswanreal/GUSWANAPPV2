@@ -1,4 +1,4 @@
-# Null Object dan parenting 2D
+# Null Object dan parenting
 
 ## Menggunakan fitur
 
@@ -13,7 +13,7 @@ Null hanya menampilkan kontrol saat dipilih di editor. Null tidak menghasilkan p
 
 Pipeline aplikasi saat ini memakai Compose Canvas / RenderNode. `LayerHierarchy` menggunakan `android.graphics.Matrix`, lalu mengonversi hasil ke matriks Compose. Evaluator dibagi oleh semua layer untuk setiap timestamp dalam frame, termasuk sampel motion blur. Preview dan ekspor menggunakan `drawComposition` yang sama.
 
-Konvensi proyek yang sudah ada dipertahankan: PosX/PosY bernilai 0 di tengah komposisi; anchor dalam satuan setengah lebar/tinggi komposisi; Scale seragam dengan 1 = 100%; Rotation dalam derajat. Parenting ini adalah transformasi planar 2D. Kamera dan rotasi model 3D tetap memiliki perilaku khusus renderer yang ada.
+Konvensi proyek yang sudah ada dipertahankan: PosX/PosY bernilai 0 di tengah komposisi; anchor dalam satuan setengah lebar/tinggi komposisi; Scale seragam dengan 1 = 100%; Rotation dalam derajat. Rumus di bawah menjelaskan jalur parenting planar 2D. Layer bidang 3D dan rig kamera memakai matriks 4x4 melalui `Scene3D` dengan kompensasi spatial.
 
 Untuk vektor kolom:
 
@@ -45,4 +45,6 @@ gradlew.bat :app:connectedDebugAndroidTest
 
 `LayerHierarchyTest` memeriksa urutan transformasi dan anchor, hierarki 40 tingkat, penolakan siklus, reparent/detach, kesesuaian preview-ekspor, skala nol, gestur, hapus/undo/redo, serta render Null tanpa piksel. `NullObjectUiTest` memeriksa menu tambah Null dan panel Parent.
 
-Salinan file sebelum perubahan ada di `backups/null-object-before/` karena workspace tidak memiliki repository Git.
+Untuk kamera, buka **Transform > Buat Null pengendali kamera**, atau pilih Null melalui **Parent**. Rig mempertahankan tampilan pada playhead aktif saat dipasang/dilepas. Kamera hanya dapat menjadi child Null; kamera tidak dapat menjadi parent. Efek Shake dan wiggle pada Null ikut menggerakkan rig. Null tidak menghasilkan piksel pada ekspor.
+
+Versi awal sumber tersimpan pada branch `main`. Hasil validasi upgrade dan batas dukungan ada di [editor-validation.md](editor-validation.md).

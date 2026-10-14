@@ -101,7 +101,8 @@ data class Track(val static: Float, val keys: List<Keyframe> = emptyList(), val 
         if (keys.isEmpty()) return static
         var t = time
         val first = keys.first(); val last = keys.last()
-        if (loop && keys.size >= 2 && t > last.time) t = first.time + (t - first.time) % (last.time - first.time)
+        val period = last.time - first.time
+        if (loop && keys.size >= 2 && period > KEY_EPS && t > last.time) t = first.time + (t - first.time) % period
         if (t <= first.time) return first.value
         if (t >= last.time) return last.value
         var i = 0
@@ -129,10 +130,12 @@ fun segmentValue(a: Keyframe, b: Keyframe, t: Float, easing: Easing): Float {
     val u = ((t - a.time) / dt).coerceIn(0f, 1f)
     if (easing == Easing.Bezier) {
         // After Effects temporal bezier: control points sit at influence × duration, sloped by speed.
-        val x1 = a.outInfluence.coerceIn(0.001f, 1f)
-        val x2 = 1f - b.inInfluence.coerceIn(0.001f, 1f)
-        val y1 = a.value + a.outSpeed * a.outInfluence * dt
-        val y2 = b.value - b.inSpeed * b.inInfluence * dt
+        val out = a.outInfluence.coerceIn(0.001f, 1f)
+        val incoming = b.inInfluence.coerceIn(0.001f, 1f)
+        val x1 = out
+        val x2 = 1f - incoming
+        val y1 = a.value + a.outSpeed * out * dt
+        val y2 = b.value - b.inSpeed * incoming * dt
         return cubic(a.value, y1, y2, b.value, solveBezierX(x1, x2, u))
     }
     return a.value + (b.value - a.value) * ease(u, easing)
@@ -215,6 +218,7 @@ enum class BlendKind(val label: String, val mode: BlendMode) {
 
 enum class FxCategory(val label: String) {
     Blur("Blur & Sharpen"), Color("Color Correction"), Distort("Distort"), Stylize("Stylize"), Generate("Generate"),
+    Keying("Keying"),
     Transition("Transition"), Time("Time"), Text("Text"), Particles("Particles"), Expression("Expression"),
 }
 
@@ -255,6 +259,12 @@ enum class FxType(val label: String, val category: FxCategory, val description: 
         listOf(FxParam("Blend With Original", 0f, 1f, 0f))),
     Posterize("Posterize", FxCategory.Color, "Kurangi jumlah tingkat warna",
         listOf(FxParam("Level", 2f, 16f, 5f))),
+    ColorBalance("Color Balance", FxCategory.Color, "Koreksi kanal merah, hijau dan biru secara terpisah",
+        listOf(FxParam("Red",-.5f,.5f,0f),FxParam("Green",-.5f,.5f,0f),FxParam("Blue",-.5f,.5f,0f))),
+    ChromaKey("Chroma Key", FxCategory.Keying, "Hapus warna latar dengan feather dan pengurangan spill",
+        listOf(FxParam("Key Hue",0f,360f,120f,"°"),FxParam("Threshold",0f,1f,.25f),FxParam("Softness",.001f,.5f,.08f),FxParam("Despill",0f,1f,.7f))),
+    LumaKey("Luma Key", FxCategory.Keying, "Hapus area gelap atau terang berdasarkan luminance",
+        listOf(FxParam("Threshold",0f,1f,.25f),FxParam("Softness",.001f,.5f,.05f),FxParam("Invert",0f,1f,0f))),
 
     WaveWarp("Wave Warp", FxCategory.Distort, "Gelombang yang bergerak",
         listOf(FxParam("Wave Height", 0f, 80f, 12f, "px"), FxParam("Wave Width", 10f, 400f, 120f, "px"), FxParam("Wave Speed", 0f, 10f, 2f))),
@@ -359,7 +369,7 @@ enum class FxType(val label: String, val category: FxCategory, val description: 
     ;
 
     /** Effects that only make sense on certain layer types. */
-    fun appliesTo(type: LayerType): Boolean = when (category) {
+    fun appliesTo(type: LayerType): Boolean = if(type==LayerType.Null) this==Shake || this==Wiggle else when (category) {
         FxCategory.Text -> type == LayerType.Text
         FxCategory.Particles -> type == LayerType.Particles
         else -> type != LayerType.Camera && type != LayerType.Null && (this != Stroke || type == LayerType.Shape)
@@ -422,6 +432,7 @@ data class Layer(
     /** A flat content plane in perspective; preserves normal 2D behavior when disabled. */
     val is3D: Boolean = false,
     val cameraSolve: CameraSolve3D? = null,
+    val faceSolve: FaceSolve3D? = null,
     val spatialOffset: List<Float> = emptyList(),
 ) {
     fun track(p: Prop) = tracks[p] ?: Track(p.default)
@@ -501,3 +512,4 @@ data class Template(
 object Templates {
     val all: List<Template> get() = TemplateLibrary.all
 }
+

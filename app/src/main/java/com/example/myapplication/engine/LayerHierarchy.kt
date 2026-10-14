@@ -115,7 +115,9 @@ fun canParentLayer(layers: List<Layer>, childId: Int, parentId: Int?): Boolean {
     val byId = layers.associateBy { it.id }
     val child = byId[childId] ?: return false
     if (parentId == null) return true
-    if (child.type == LayerType.Gradient || child.type == LayerType.Camera) return false
+    if (child.type == LayerType.Gradient) return false
+    if (child.type == LayerType.Camera && byId[parentId]?.type != LayerType.Null) return false
+    if((child.is3D || byId[parentId]?.is3D==true) && !child.supports3D()) return false
     val seen = hashSetOf(childId)
     var next: Int? = parentId
     while (next != null) {
@@ -139,9 +141,9 @@ fun reparentLayer(
     require(canParentLayer(layers, childId, parentId)) { "Parent tidak valid atau membentuk siklus." }
     val byId = layers.associateBy { it.id }
     val child = byId.getValue(childId)
-    if (child.parentId == parentId) return child
+    if (child.parentId == parentId && keepWorld) return child
     val parent = parentId?.let(byId::get)
-    if (child.is3D || parent?.is3D == true) {
+    if (child.type == LayerType.Camera || child.is3D || parent?.is3D == true) {
         require(child.supports3D()) { "Layer ini belum mendukung parenting 3D." }
         return if (keepWorld) Scene3D(layers,time,size).reparent(child,parent)
         else child.copy(parentId=parentId, parentOffset=ParentOffset(), spatialOffset=emptyList(), is3D=true)
@@ -155,3 +157,4 @@ fun reparentLayer(
     val offset = Matrix().apply { setConcat(inverse, oldBasis) }
     return child.copy(parentId = parentId, parentOffset = ParentOffset.fromPixels(offset, size))
 }
+

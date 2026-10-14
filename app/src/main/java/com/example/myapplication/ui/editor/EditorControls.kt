@@ -11,6 +11,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -63,14 +64,18 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.key.*
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -96,12 +101,12 @@ import com.example.myapplication.ui.theme.TextMid
 /** How a value is shown: like After Effects, transforms read in pixels, percent and revolutions. */
 internal class UiUnit(val toUi: (Float) -> Float, val fromUi: (Float) -> Float, val format: (Float) -> String)
 
-internal fun unitFor(key: PropKey, spec: FxParam): UiUnit = when (key) {
+internal fun unitFor(key: PropKey, spec: FxParam, width: Float = 1920f, height: Float = 1080f): UiUnit = when (key) {
     is PropKey.T -> when (key.prop) {
-        Prop.AnchorX -> UiUnit({ it * 960f }, { it / 960f }) { "%.1f".format(it) }
-        Prop.AnchorY -> UiUnit({ it * 540f }, { it / 540f }) { "%.1f".format(it) }
-        Prop.PosX -> UiUnit({ (it + 1f) * 960f }, { it / 960f - 1f }) { "%.1f".format(it) }
-        Prop.PosY -> UiUnit({ (it + 1f) * 540f }, { it / 540f - 1f }) { "%.1f".format(it) }
+        Prop.AnchorX -> UiUnit({ it * width/2 }, { it * 2/width }) { "%.1f".format(it) }
+        Prop.AnchorY -> UiUnit({ it * height/2 }, { it * 2/height }) { "%.1f".format(it) }
+        Prop.PosX -> UiUnit({ (it + 1f) * width/2 }, { it * 2/width - 1f }) { "%.1f".format(it) }
+        Prop.PosY -> UiUnit({ (it + 1f) * height/2 }, { it * 2/height - 1f }) { "%.1f".format(it) }
         Prop.Scale -> UiUnit({ it * 100f }, { it / 100f }) { "%.1f%%".format(it) }
         Prop.Rotation -> UiUnit({ it }, { it }) { v ->
             val rev = (v / 360f).toInt()
@@ -127,7 +132,7 @@ internal fun PropertyRow(state: EditorState, layer: Layer, key: PropKey, label: 
     val track = layer.trackOf(key) ?: return
     val name = label ?: spec.label
     val value = track.valueAt(state.time, layer.easing)
-    val unit = remember(key, spec) { unitFor(key, spec) }
+    val unit = remember(key, spec, state.settings) { unitFor(key, spec, state.settings.width.toFloat(), state.settings.height.toFloat()) }
     val keyHere = track.hasKeyAt(state.snap(state.time))
     val haptics = LocalHapticFeedback.current
     val tint = if (track.animated) Accent else Blue
@@ -154,11 +159,15 @@ internal fun PropertyRow(state: EditorState, layer: Layer, key: PropKey, label: 
 
 @Composable
 private fun StopwatchButton(animated: Boolean, name: String, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
     val tint by animateColorAsState(if (animated) Accent else TextLow, tween(160), label = "stopwatch")
     Box(
         Modifier
             .size(44.dp)
             .clip(CircleShape)
+            .border(if(focused) 2.dp else 0.dp,if(focused) Accent else Color.Transparent,CircleShape)
+            .onFocusChanged { focused=it.isFocused }
+            .semantics { contentDescription="Animasi $name"; stateDescription=if(animated) "Aktif" else "Nonaktif" }
             .clickable(role = Role.Switch, onClickLabel = if (animated) "Matikan animasi $name" else "Animasikan $name", onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Icon(Icons.Rounded.Timer, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp)) }
@@ -175,6 +184,7 @@ internal fun ScrubValue(
     onChange: (Float) -> Unit,
 ) {
     var editing by remember { mutableStateOf(false) }
+    var focused by remember { mutableStateOf(false) }
     val current by rememberUpdatedState(value)
     val change by rememberUpdatedState(onChange)
     val perPx = (range.endInclusive - range.start) / with(LocalDensity.current) { 280.dp.toPx() }
@@ -185,6 +195,9 @@ internal fun ScrubValue(
         maxLines = 1,
         modifier = Modifier
             .clip(RoundedCornerShape(6.dp))
+            .border(if(focused) 2.dp else 0.dp,if(focused) TextHigh else Color.Transparent,RoundedCornerShape(6.dp))
+            .onFocusChanged { focused=it.isFocused }
+            .testTag("scrub-$name")
             .pointerInput(range) {
                 detectHorizontalDragGestures { ch, dx ->
                     ch.consume()
@@ -196,8 +209,12 @@ internal fun ScrubValue(
     )
     if (editing) {
         var text by remember { mutableStateOf("%.2f".format(unit.toUi(value)).replace(',', '.')) }
+        val parsed=text.replace(',', '.').toFloatOrNull()?.takeIf { it.isFinite() }
         AlertDialog(
             onDismissRequest = { editing = false },
+            modifier=Modifier.onKeyEvent { event ->
+                if(event.type==KeyEventType.KeyDown && event.key==Key.Escape) { editing=false; true } else false
+            },
             containerColor = Ink800,
             title = { Text(name, style = MaterialTheme.typography.titleMedium, color = TextHigh) },
             text = {
@@ -207,12 +224,14 @@ internal fun ScrubValue(
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     textStyle = MonoLabel.copy(fontSize = 16.sp, color = TextHigh),
+                    isError=parsed==null,
+                    supportingText={ if(parsed==null) Text("Masukkan angka yang valid.") },
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Accent, unfocusedBorderColor = LineStrong),
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    text.replace(',', '.').toFloatOrNull()?.let { change(unit.fromUi(it).coerceIn(range.start, range.endInclusive)) }
+                TextButton(enabled=parsed!=null,onClick = {
+                    parsed?.let { change(unit.fromUi(it).coerceIn(range.start, range.endInclusive)) }
                     editing = false
                 }) { Text("Terapkan", color = Accent) }
             },
@@ -240,8 +259,13 @@ private fun KeyNavigator(keyHere: Boolean, onPrev: () -> Unit, onToggle: () -> U
 
 @Composable
 private fun NavBox(label: String, onClick: () -> Unit, content: @Composable () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
     Box(
-        Modifier.size(width = 32.dp, height = 44.dp).clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button, onClickLabel = label, onClick = onClick),
+        Modifier.size(width = 44.dp, height = 44.dp).clip(RoundedCornerShape(8.dp))
+            .border(if(focused) 2.dp else 0.dp,if(focused) Accent else Color.Transparent,RoundedCornerShape(8.dp))
+            .onFocusChanged { focused=it.isFocused }
+            .semantics { contentDescription=label }
+            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { content() }
 }
@@ -256,14 +280,25 @@ internal fun CompactSlider(
     track: Brush? = null,
     onChange: (Float) -> Unit,
 ) {
+    var focused by remember { mutableStateOf(false) }
     val current by rememberUpdatedState(value)
     val change by rememberUpdatedState(onChange)
     val span = (range.endInclusive - range.start).takeIf { it > 0f } ?: 1f
     Canvas(
         Modifier
             .fillMaxWidth()
-            .height(30.dp)
+            .height(44.dp)
             .padding(horizontal = 12.dp)
+            .border(if(focused) 2.dp else 0.dp,if(focused) Accent else Color.Transparent,RoundedCornerShape(4.dp))
+            .onFocusChanged { focused=it.isFocused }
+            .onKeyEvent { event ->
+                if(event.type!=KeyEventType.KeyDown) false else when(event.key) {
+                    Key.DirectionLeft,Key.DirectionDown -> { change((current-span/100).coerceIn(range.start,range.endInclusive)); true }
+                    Key.DirectionRight,Key.DirectionUp -> { change((current+span/100).coerceIn(range.start,range.endInclusive)); true }
+                    else -> false
+                }
+            }
+            .focusable()
             .semantics {
                 contentDescription = name
                 progressBarRangeInfo = ProgressBarRangeInfo(current.coerceIn(range.start, range.endInclusive), range)
@@ -375,3 +410,4 @@ internal fun EasingChip(easing: Easing, selected: Boolean, onClick: () -> Unit) 
         Text(easing.label, style = MaterialTheme.typography.labelMedium, color = if (selected) TextHigh else TextMid)
     }
 }
+

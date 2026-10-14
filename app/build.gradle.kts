@@ -15,11 +15,19 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "1.0"
+        manifestPlaceholders["appLabel"] = "@string/app_name"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
+        debug {
+            if (providers.gradleProperty("cloudPreview").orNull == "true") {
+                applicationIdSuffix = ".preview"
+                versionNameSuffix = "-cloud-preview"
+                manifestPlaceholders["appLabel"] = "Guswaneditor Preview"
+            }
+        }
         release {
             optimization {
                 enable = true
@@ -37,6 +45,7 @@ android {
 }
 
 dependencies {
+    implementation("com.google.mlkit:face-detection:16.1.7")
     implementation(libs.opencv)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
@@ -56,3 +65,4 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
+

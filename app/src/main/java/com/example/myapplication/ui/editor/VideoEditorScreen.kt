@@ -5,6 +5,19 @@ import android.content.Context
 import android.content.ContextWrapper
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.platform.LocalView
@@ -110,6 +123,9 @@ import androidx.compose.material.icons.rounded.ViewInAr
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.ZoomOutMap
+import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -166,6 +182,7 @@ import com.example.myapplication.engine.VideoExporter
 import com.example.myapplication.engine.drawComposition
 import com.example.myapplication.engine.drawShape
 import com.example.myapplication.engine.pickLayer
+import com.example.myapplication.engine.footageToScreen
 import com.example.myapplication.ui.components.ActionButton
 import com.example.myapplication.ui.components.ModelPreview
 import com.example.myapplication.ui.components.Panel
@@ -228,12 +245,16 @@ private fun EditorPanel.short(): String = when (this) {
     EditorPanel.Text -> "Teks"
     EditorPanel.Shape -> "Bentuk"
     EditorPanel.Model -> "Model"
-    EditorPanel.Tracker -> "Track 3D"
+    EditorPanel.Tracker -> "Tracking"
 }
 
 /** Panels that make sense for a layer type, in toolbar order. */
-private fun panelsFor(type: LayerType): List<EditorPanel> = buildList {
+internal fun panelsFor(type: LayerType): List<EditorPanel> = buildList {
     if (type == LayerType.Null) {
+        add(EditorPanel.Transform); add(EditorPanel.Effects); add(EditorPanel.Graph); add(EditorPanel.Parent)
+        return@buildList
+    }
+    if(type==LayerType.Camera) {
         add(EditorPanel.Transform); add(EditorPanel.Graph); add(EditorPanel.Parent)
         return@buildList
     }
@@ -246,7 +267,7 @@ private fun panelsFor(type: LayerType): List<EditorPanel> = buildList {
         else -> Unit
     }
     add(EditorPanel.Color); add(EditorPanel.Blending)
-    if (type != LayerType.Gradient && type != LayerType.Camera) add(EditorPanel.Parent)
+    if (type != LayerType.Gradient) add(EditorPanel.Parent)
 }
 
 private fun importMessage(r: ModelImporter.Result): String =
@@ -267,6 +288,10 @@ fun VideoEditorScreen(settings: ProjectSettings, template: Template?, onBack: ()
     var showAdd by remember { mutableStateOf(false) }
     var showEffects by remember { mutableStateOf(false) }
     var showAssistant by remember { mutableStateOf(false) }
+    var showLayers by remember { mutableStateOf(false) }
+    val largeType=LocalDensity.current.fontScale>=1.5f
+    val configuration=LocalConfiguration.current
+    val shortLandscape=configuration.screenWidthDp>configuration.screenHeightDp*1.35f && configuration.screenHeightDp<520
     var importing by remember { mutableStateOf(false) }
     var importIntoSelected by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -343,15 +368,52 @@ fun VideoEditorScreen(settings: ProjectSettings, template: Template?, onBack: ()
     val panelArea: @Composable (Modifier) -> Unit = { m ->
         PanelSheet(state, m, importing, onBrowse = { showEffects = true }, onImport = { startImport(intoSelected = true) })
     }
+    val workspaceActions: @Composable () -> Unit = {
+        Box {
+            ToolButton(Icons.Rounded.Layers,"Pilih layer",{showLayers=true},size=44.dp)
+            DropdownMenu(showLayers,{showLayers=false},modifier=Modifier.heightIn(max=360.dp)) {
+                DropdownMenuItem(text={Text("Tidak ada seleksi")},onClick={state.select(null);showLayers=false})
+                state.layers.asReversed().forEach { layer ->
+                    DropdownMenuItem(text={Text(layer.name,maxLines=1,overflow=TextOverflow.Ellipsis)},onClick={
+                        state.playing=false; state.select(layer.id)
+                        if(state.time<layer.start || state.time>layer.end) state.seek(layer.start)
+                        showLayers=false
+                    })
+                }
+            }
+        }
+        ToolButton(Icons.Rounded.ZoomOutMap,"Tampilkan panduan komposisi",{state.showGuides=!state.showGuides},active=state.showGuides,size=44.dp)
+        if(largeType || shortLandscape) ToolButton(Icons.Rounded.Timeline,"Buat Motion",{state.playing=false;showAssistant=true},size=44.dp)
+        else TextButton(onClick = { state.playing=false; showAssistant=true }) { Text("Buat Motion",color=TextHigh) }
+    }
 
-    Column(Modifier.fillMaxSize().background(Ink950)) {
-        EditorTopBar(state, leaveEditor, onExport = { state.playing = false; showExport = true }, saveStatus = if (autosaveEnabled) store.status else "")
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = { state.playing=false; showAssistant=true }) { Text("AI / Buat Motion") }
-            if (state.selected?.type == LayerType.Video) TextButton(onClick = { state.panel=EditorPanel.Tracker }) { Text("Track Kamera 3D") }
+    Column(Modifier.fillMaxSize().background(Ink950).safeDrawingPadding().imePadding().testTag("editor-workspace").onKeyEvent { event ->
+        if(event.type!=KeyEventType.KeyDown) false else when {
+            event.isCtrlPressed && event.key==Key.Z && event.isShiftPressed -> { state.redo(); true }
+            event.isCtrlPressed && event.key==Key.Z -> { state.undo(); true }
+            event.key==Key.Spacebar -> { state.playing=!state.playing; true }
+            event.key==Key.DirectionLeft -> { state.playing=false; state.seek(state.time-state.frame); true }
+            event.key==Key.DirectionRight -> { state.playing=false; state.seek(state.time+state.frame); true }
+            event.key==Key.F9 && state.selected!=null -> {
+                val key=state.graphKey ?: state.selected!!.animatedKeys.firstOrNull()
+                if(key!=null) state.setKeyEasing(key,state.graphKeyIndex,com.example.myapplication.engine.Easing.EaseInOut)
+                true
+            }
+            event.key==Key.Escape && state.panel!=null -> { state.panel=null; true }
+            else -> false
+        }
+    }.focusable()) {
+        EditorTopBar(state, leaveEditor, onExport = { state.playing = false; showExport = true }, saveStatus = if (autosaveEnabled) store.status else "",extras={if(shortLandscape) workspaceActions()})
+        if(!shortLandscape) Row(Modifier.fillMaxWidth().background(Ink900).padding(horizontal=12.dp),verticalAlignment=Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                if(!shortLandscape) Text("Composition",style=MaterialTheme.typography.labelLarge,color=TextHigh,maxLines=1,overflow=TextOverflow.Ellipsis)
+                Text("${state.settings.width} × ${state.settings.height}${if(shortLandscape) "" else " · ${state.fps} fps"}",style=MonoLabel,color=TextMid,maxLines=1,overflow=TextOverflow.Ellipsis)
+            }
+            workspaceActions()
         }
         BoxWithConstraints(Modifier.fillMaxSize()) {
-            if (maxWidth >= 840.dp) {
+            val keyboardVisible=WindowInsets.ime.getBottom(LocalDensity.current)>0
+            if (maxWidth >= 1000.dp || (maxWidth>=840.dp && maxHeight>=560.dp)) {
                 Row(Modifier.fillMaxSize()) {
                     Column(Modifier.weight(1f).fillMaxHeight()) {
                         Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
@@ -360,23 +422,44 @@ fun VideoEditorScreen(settings: ProjectSettings, template: Template?, onBack: ()
                         TransportBar(state)
                         TimelineView(state, Modifier.height(280.dp).fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) { showAdd = true }
                     }
-                    Column(Modifier.width(400.dp).fillMaxHeight().background(Ink900)) {
+                    Column(Modifier.width(360.dp).fillMaxHeight().background(Ink900)) {
                         EditorToolbar(state, importing, mediaProgress, onAdd = { state.addLayer(it) }, onImport = { startImport(intoSelected = false) }, onMedia = ::startMedia)
                         // On wide screens the side column always shows a panel for the selection.
                         LaunchedEffect(state.selectedId) { if (state.panel == null && state.selectedId != null) state.panel = EditorPanel.Transform }
                         Box(Modifier.weight(1f)) { panelArea(Modifier.fillMaxSize()) }
                     }
                 }
+            } else if(maxWidth>maxHeight*1.35f) {
+                Row(Modifier.fillMaxSize()) {
+                    Column(Modifier.weight(.44f).fillMaxHeight().background(Ink900)) {
+                        Box(Modifier.weight(1f).fillMaxWidth().padding(10.dp),contentAlignment=Alignment.Center) {
+                            BoxWithConstraints(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) {
+                                val previewWidth=minOf(maxWidth,maxHeight*state.settings.aspectValue)
+                                PreviewStage(state,Modifier.width(previewWidth).height(previewWidth/state.settings.aspectValue))
+                            }
+                        }
+                        TransportBar(state,compact=true)
+                        if(state.panel!=null && !keyboardVisible) TimelineView(state,Modifier.height(84.dp).fillMaxWidth(),compact=true) { showAdd=true }
+                    }
+                    Column(Modifier.weight(.56f).fillMaxHeight()) {
+                        if(!keyboardVisible && state.panel==null) TimelineView(state,Modifier.weight(1f).fillMaxWidth()) { showAdd=true }
+                        if(state.panel!=null) Box(Modifier.weight(1f)) { panelArea(Modifier.fillMaxSize()) }
+                        if(!keyboardVisible) EditorToolbar(state,importing,mediaProgress,onAdd={state.addLayer(it)},onImport={startImport(intoSelected=false)},onMedia=::startMedia)
+                    }
+                }
             } else {
                 Column(Modifier.fillMaxSize()) {
-                    val maxPreview = LocalConfiguration.current.screenHeightDp.dp * 0.42f
-                    Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
-                        PreviewStage(state, Modifier.heightIn(max = maxPreview))
+                    val maxPreview = this@BoxWithConstraints.maxHeight * if(state.panel==null) .42f else if(largeType) .10f else .17f
+                    if(!keyboardVisible && state.panel!=EditorPanel.Graph) BoxWithConstraints(Modifier.fillMaxWidth().heightIn(max=maxPreview).background(Ink900).padding(horizontal=12.dp,vertical=10.dp),contentAlignment=Alignment.Center) {
+                        val previewWidth=minOf(maxWidth,(maxPreview-20.dp).coerceAtLeast(40.dp)*state.settings.aspectValue)
+                        PreviewStage(state,Modifier.width(previewWidth).height(previewWidth/state.settings.aspectValue))
                     }
-                    TransportBar(state)
-                    Box(Modifier.weight(1f).fillMaxWidth()) {
-                        TimelineView(state, Modifier.fillMaxSize().padding(horizontal = 12.dp).padding(bottom = 8.dp)) { showAdd = true }
-                        panelArea(Modifier.fillMaxSize())
+                    if(!keyboardVisible) TransportBar(state,compact=state.panel!=null)
+                    if(state.panel!=null) {
+                        if(!keyboardVisible) TimelineView(state,Modifier.height(84.dp).fillMaxWidth().padding(horizontal=8.dp),compact=true) { showAdd=true }
+                        Box(Modifier.weight(1f).fillMaxWidth()) { panelArea(Modifier.fillMaxSize()) }
+                    } else {
+                        TimelineView(state,Modifier.weight(1f).fillMaxWidth().padding(horizontal=8.dp).padding(bottom=8.dp)) { showAdd=true }
                     }
                     EditorToolbar(state, importing, mediaProgress, onAdd = { state.addLayer(it) }, onImport = { startImport(intoSelected = false) }, onMedia = ::startMedia)
                 }
@@ -395,7 +478,9 @@ fun VideoEditorScreen(settings: ProjectSettings, template: Template?, onBack: ()
     }
     if (showAssistant) MotionAssistantSheet(state) { showAssistant=false }
     if (showEffects) {
-        EffectsBrowserSheet(onDismiss = { showEffects = false }) { type ->
+        EffectsBrowserSheet(onDismiss = { showEffects = false },layerType=state.selected?.type ?: LayerType.Shape,onPreset={
+            showEffects=false; state.addPreset(it)
+        }) { type ->
             showEffects = false
             state.addEffect(type)
         }
@@ -410,16 +495,16 @@ fun VideoEditorScreen(settings: ProjectSettings, template: Template?, onBack: ()
 // ---------------------------------------------------------------- Top bar & transport
 
 @Composable
-private fun EditorTopBar(state: EditorState, onBack: () -> Unit, onExport: () -> Unit, saveStatus: String) {
+private fun EditorTopBar(state: EditorState, onBack: () -> Unit, onExport: () -> Unit, saveStatus: String,extras:@Composable ()->Unit={}) {
     Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         ToolButton(Icons.AutoMirrored.Rounded.ArrowBack, "Kembali", onBack, tint = TextHigh)
         Column(Modifier.weight(1f).padding(start = 2.dp)) {
             Text(state.projectName, style = MaterialTheme.typography.titleMedium, color = TextHigh, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (saveStatus.isNotBlank()) Text(saveStatus, style = MonoLabel, color = TextLow, maxLines = 1)
-            Text("${state.settings.width}×${state.settings.height} · ${state.fps} fps", style = MonoLabel, color = TextLow, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         ToolButton(Icons.AutoMirrored.Rounded.Undo, "Urungkan", state::undo, enabled = state.canUndo, tint = TextHigh)
         ToolButton(Icons.AutoMirrored.Rounded.Redo, "Ulangi", state::redo, enabled = state.canRedo, tint = TextHigh)
+        extras()
         Spacer(Modifier.width(4.dp))
         ActionButton("Ekspor", onExport, icon = Icons.Rounded.FileUpload, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp))
         Spacer(Modifier.width(8.dp))
@@ -427,21 +512,26 @@ private fun EditorTopBar(state: EditorState, onBack: () -> Unit, onExport: () ->
 }
 
 @Composable
-private fun TransportBar(state: EditorState) {
+private fun TransportBar(state: EditorState,compact:Boolean=false) {
     val screenDp = LocalConfiguration.current.screenWidthDp
-    Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(state.timecode(state.time), style = MonoLabel.copy(fontSize = 17.sp, fontWeight = FontWeight.SemiBold), color = Accent)
-            Text("/ ${state.timecode(state.duration)} · ${state.fps} fps", style = MonoLabel, color = TextLow)
+    val roomy=!compact && (LocalDensity.current.fontScale>=1.5f || screenDp<350)
+    Column(Modifier.fillMaxWidth().background(Ink900)) {
+        if(roomy) Row(Modifier.fillMaxWidth().padding(horizontal=14.dp,vertical=6.dp),verticalAlignment=Alignment.CenterVertically) {
+            Text(state.timecode(state.time),style=MonoLabel.copy(fontSize=17.sp,lineHeight=22.sp),color=Accent,modifier=Modifier.weight(1f))
+            Text("/ ${state.timecode(state.duration)}",style=MonoLabel,color=TextMid)
         }
-        ToolButton(Icons.Rounded.SkipPrevious, "Keyframe sebelumnya", { state.jumpKey(null, next = false) }, tint = TextHigh)
-        PlayButton(state)
-        ToolButton(Icons.Rounded.SkipNext, "Keyframe berikutnya", { state.jumpKey(null, next = true) }, tint = TextHigh)
-        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End) {
-            ToolButton(Icons.Rounded.ZoomOutMap, "Paskan timeline", {
-                state.dpPerSecond = ((screenDp / 2f - 24f) / state.duration).coerceIn(12f, 480f)
-            }, tint = TextMid)
-            ToolButton(Icons.Rounded.Repeat, "Ulang otomatis", { state.loop = !state.loop }, active = state.loop, tint = TextMid)
+        Row(Modifier.fillMaxWidth().heightIn(min=56.dp).padding(horizontal=if(compact) 4.dp else 10.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=if(roomy) Arrangement.Center else Arrangement.Start) {
+            if(!roomy) Column(Modifier.weight(1f)) {
+                Text(state.timecode(state.time),style=MonoLabel.copy(fontSize=if(compact && LocalDensity.current.fontScale>=1.5f) 13.sp else 17.sp,lineHeight=22.sp,fontWeight=FontWeight.SemiBold),color=Accent,maxLines=1,overflow=TextOverflow.Ellipsis)
+                if(!compact) Text("/ ${state.timecode(state.duration)}",style=MonoLabel,color=TextLow)
+            }
+            ToolButton(Icons.Rounded.SkipPrevious,"Keyframe sebelumnya",{state.jumpKey(null,next=false)},tint=TextHigh)
+            PlayButton(state)
+            ToolButton(Icons.Rounded.SkipNext,"Keyframe berikutnya",{state.jumpKey(null,next=true)},tint=TextHigh)
+            if(!compact) Row(if(roomy) Modifier else Modifier.weight(1f),horizontalArrangement=Arrangement.End) {
+                ToolButton(Icons.Rounded.ZoomOutMap,"Paskan timeline",{state.dpPerSecond=((screenDp/2f-24f)/state.duration).coerceIn(12f,480f)},tint=TextMid)
+                ToolButton(Icons.Rounded.Repeat,"Ulang otomatis",{state.loop=!state.loop},active=state.loop,tint=TextMid)
+            }
         }
     }
 }
@@ -486,8 +576,8 @@ private fun PreviewStage(state: EditorState, modifier: Modifier) {
     Box(
         modifier
             .aspectRatio(state.settings.aspectValue)
-            .clip(RoundedCornerShape(12.dp))
-            .border(1.dp, LineStrong, RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(4.dp))
+            .border(1.dp, LineStrong, RoundedCornerShape(4.dp))
     ) {
         Canvas(
             Modifier
@@ -508,17 +598,25 @@ private fun PreviewStage(state: EditorState, modifier: Modifier) {
                     }
                 }
         ) {
+            if(size.width<=0f || size.height<=0f) return@Canvas
             // Frames snap to the project's rate, so a 24 fps project previews exactly like its export.
-            drawComposition(state.layers, state.snap(state.time), measurer, state.selectedId.takeIf { !state.playing }, background = state.settings.background)
+            drawComposition(state.layers, state.snap(state.time), measurer, state.selectedId.takeIf { !state.playing }, background = state.settings.background,fps=state.fps)
+            selected?.takeIf { !state.playing && it.type==LayerType.Video && it.faceSolve!=null }?.let { video ->
+                video.faceSolve?.at(state.time)?.landmarks?.forEach { point ->
+                    footageToScreen(state.layers,video.id,state.time,size,point[0],point[1])?.let { p ->
+                        drawCircle(Ink950,4.dp.toPx(),p)
+                        drawCircle(Accent,2.dp.toPx(),p)
+                    }
+                }
+            }
             // Title-safe guides, like the overlay in AE's composition panel.
-            if (!state.playing) {
+            if (!state.playing && state.showGuides) {
                 val inset = Offset(size.width * 0.1f, size.height * 0.1f)
                 drawRect(Color.White.copy(alpha = 0.1f), inset, Size(size.width - inset.x * 2, size.height - inset.y * 2), style = Stroke(1f))
             }
         }
-        StatPill(state.timecode(state.time), Modifier.align(Alignment.TopStart).padding(8.dp), color = TextHigh)
         AnimatedVisibility(
-            selected != null && !state.playing,
+            selected != null && !state.playing && LocalDensity.current.fontScale<1.5f,
             enter = fadeIn(tween(160)) + slideInVertically(tween(200)) { -it / 2 },
             exit = fadeOut(tween(120)),
             modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
@@ -526,7 +624,7 @@ private fun PreviewStage(state: EditorState, modifier: Modifier) {
             val l = remember { mutableStateOf(selected) }.apply { if (selected != null) value = selected }.value
             if (l != null) {
                 Row(
-                    Modifier.clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 8.dp, vertical = 4.dp),
+                    Modifier.clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.8f)).padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(Modifier.size(7.dp).clip(CircleShape).background(l.color))
@@ -551,7 +649,7 @@ private fun EditorToolbar(state: EditorState, importing: Boolean, mediaProgress:
             label = "toolbar",
         ) { id ->
             val l = state.layers.firstOrNull { it.id == id }
-            LazyRow(contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            LazyRow(modifier=Modifier.testTag("editor-toolbar"),contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (l == null) {
                     item { ToolCaption("Tambah") }
                     val media = mediaProgress >= 0f
@@ -595,6 +693,8 @@ private fun ToolItem(
     onClick: () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
+    var focused by remember { mutableStateOf(false) }
+    val width=80.dp*LocalDensity.current.fontScale.coerceAtLeast(1f)
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.9f else 1f, spring(stiffness = Spring.StiffnessMedium), label = "toolScale")
     val fg by animateColorAsState(
@@ -603,12 +703,15 @@ private fun ToolItem(
     val bar by animateFloatAsState(if (active) 1f else 0f, spring(stiffness = Spring.StiffnessMediumLow), label = "toolBar")
     Column(
         Modifier
-            .width(70.dp)
-            .heightIn(min = 64.dp)
+            .width(width)
+            .heightIn(min = 60.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(8.dp))
+            .background(if(active) Ink700 else Color.Transparent)
+            .border(if(focused) 2.dp else 0.dp,if(focused) TextHigh else Color.Transparent,RoundedCornerShape(8.dp))
+            .onFocusChanged { focused=it.isFocused }
             .clickable(interaction, LocalIndication.current, enabled = enabled, role = Role.Button, onClick = onClick)
-            .padding(top = 9.dp, bottom = 6.dp),
+            .padding(top = 8.dp, bottom = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(22.dp))
@@ -640,11 +743,8 @@ private fun PanelSheet(state: EditorState, modifier: Modifier, importing: Boolea
         val p = lastPanel.value ?: return@AnimatedVisibility
         val shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)
         Column(Modifier.fillMaxSize().clip(shape).background(Ink850).border(1.dp, Line, shape).pointerInput(Unit) { detectTapGestures { } }) {
-            Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
-                Box(Modifier.size(width = 36.dp, height = 4.dp).clip(CircleShape).background(LineStrong))
-            }
             Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                ToolButton(Icons.Rounded.Close, "Tutup panel", { state.panel = null })
+                ToolButton(Icons.Rounded.Close, "Tutup panel", { state.panel = null },size=44.dp)
                 Box(Modifier.weight(1f)) { PanelTitle(p, l) }
             }
             AnimatedContent(
@@ -672,7 +772,7 @@ private fun PanelContent(state: EditorState, layer: com.example.myapplication.en
         EditorPanel.Text -> if (layer.type == LayerType.Text) TextPanel(state, layer) else TransformPanel(state, layer)
         EditorPanel.Shape -> if (layer.type == LayerType.Shape) ShapePanel(state, layer) else TransformPanel(state, layer)
         EditorPanel.Model -> if (layer.type == LayerType.Model3D) ModelPanel(state, layer, importing, onImport) else TransformPanel(state, layer)
-        EditorPanel.Tracker -> CameraTrackingPanel(state,layer)
+        EditorPanel.Tracker -> TrackingPanel(state,layer)
     }
 }
 
@@ -748,11 +848,10 @@ private fun LayerThumb(type: LayerType) {
         LayerType.Shape -> Canvas(Modifier.size(56.dp)) {
             translate(size.width / 2, size.height / 2) { drawShape(ShapeKind.Star, Pink, size.minDimension * 0.42f, outline = false) }
         }
-        LayerType.Model3D -> ModelPreview(ModelLibrary.byId("robot"), Modifier.size(76.dp), zoom = 1.7f)
+        LayerType.Model3D -> ModelPreview(ModelLibrary.byId("robot"), Modifier.size(76.dp), spin=false,zoom = 1.7f)
         LayerType.Gradient -> Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Violet, Ink950, Blue.copy(alpha = 0.6f)))))
         LayerType.Particles -> {
-            var t by remember { mutableFloatStateOf(0f) }
-            LaunchedEffect(Unit) { val start = withFrameNanos { it }; while (true) withFrameNanos { t = (it - start) / 1e9f } }
+            val t=1.4f
             Canvas(Modifier.fillMaxSize()) {
                 for (i in 0 until 26) {
                     val x = ((i * 37) % 100) / 100f * size.width
