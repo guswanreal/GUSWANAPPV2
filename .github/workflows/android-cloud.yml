@@ -28,7 +28,7 @@ jobs:
       - name: Install compile SDK
         run: sdkmanager 'platforms;android-37.0' 'build-tools;36.1.0'
       - name: Build APK and unit tests
-        run: ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:assembleDebugAndroidTest --no-daemon --max-workers=2 --console=plain
+        run: ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:assembleDebugAndroidTest -PcloudPreview=true --no-daemon --max-workers=2 --console=plain
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -48,11 +48,13 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
-          cache: gradle
       - uses: android-actions/setup-android@v4
         with:
           packages: platform-tools
-      - run: sdkmanager 'platforms;android-37.0' 'build-tools;36.1.0'
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-build-results
+          path: app/build
       - name: Enable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules

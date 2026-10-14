@@ -117,6 +117,7 @@ fun canParentLayer(layers: List<Layer>, childId: Int, parentId: Int?): Boolean {
     if (parentId == null) return true
     if (child.type == LayerType.Gradient) return false
     if (child.type == LayerType.Camera && byId[parentId]?.type != LayerType.Null) return false
+    if((child.is3D || byId[parentId]?.is3D==true) && !child.supports3D()) return false
     val seen = hashSetOf(childId)
     var next: Int? = parentId
     while (next != null) {

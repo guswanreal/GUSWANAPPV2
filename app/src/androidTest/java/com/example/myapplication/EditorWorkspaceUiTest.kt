@@ -20,12 +20,14 @@ class EditorWorkspaceUiTest {
     @get:Rule val compose=createComposeRule()
     private val context get()=InstrumentationRegistry.getInstrumentation().targetContext
     private fun open() {
-        compose.mainClock.autoAdvance=false
+        android.util.Log.i("EditorUiQa","Creating editor content")
+        compose.mainClock.autoAdvance=true
         val settings=ProjectSettings(name="Motion study",duration=6f)
         val shape=Layer(1,"Shape 1",LayerType.Shape,Color(0xFFFF6A2B),0f,6f)
             .withTrack(Prop.PosX,Track(0f,listOf(Keyframe(0f,-.5f),Keyframe(2f,.5f))))
         compose.setContent { MyApplicationTheme { VideoEditorScreen(settings,null,onBack={},restored=ProjectSnapshot("qa-editor",settings,listOf(shape),selectedId=1),autosaveEnabled=false) } }
         compose.mainClock.advanceTimeBy(1000)
+        android.util.Log.i("EditorUiQa","Editor content ready")
     }
     private fun capture(name:String) {
         val bitmap=compose.onRoot().captureToImage().asAndroidBitmap()
@@ -35,7 +37,7 @@ class EditorWorkspaceUiTest {
         File(directory,"$name-$orientation-${if(scale>1.5f) "large-type" else "default"}.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG,100,it) }
     }
 
-    @Test fun editorKeepsTimelineContextAndOpensFlowControls() {
+    @Test(timeout=120000) fun editorKeepsTimelineContextAndOpensFlowControls() {
         open()
         compose.onNodeWithTag("editor-workspace").assertIsDisplayed()
         capture("editor")
@@ -51,11 +53,13 @@ class EditorWorkspaceUiTest {
         compose.onNodeWithTag("curve-controls").assertDoesNotExist()
     }
 
-    @Test fun numericControlsRejectInvalidValuesAndEffectPresetsAreReachable() {
+    @Test(timeout=120000) fun numericControlsRejectInvalidValuesAndEffectPresetsAreReachable() {
         open()
         compose.onNodeWithText("Transform").performClick()
+        android.util.Log.i("EditorUiQa","Transform opened")
         compose.mainClock.advanceTimeBy(1000)
         compose.onNodeWithTag("scrub-Position X").performScrollTo().performClick()
+        android.util.Log.i("EditorUiQa","Numeric dialog opened")
         compose.mainClock.advanceTimeBy(1000)
         compose.onNode(hasSetTextAction()).performTextReplacement("NaN")
         compose.onNodeWithText("Masukkan angka yang valid.").assertIsDisplayed()

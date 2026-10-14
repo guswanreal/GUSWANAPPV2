@@ -15,8 +15,7 @@ class NullObjectUiTest {
     @get:Rule val compose = createComposeRule()
 
     @Test fun addNullFromEditorAndOpenParentPanel() {
-        // The add menu contains continuously animated model/particle previews.
-        compose.mainClock.autoAdvance = false
+        compose.mainClock.autoAdvance = true
         compose.setContent {
             MyApplicationTheme { VideoEditorScreen(ProjectSettings(), null, onBack = {}, autosaveEnabled = false) }
         }
@@ -35,7 +34,7 @@ class NullObjectUiTest {
     }
 
     @Test fun generateOfflineMotionFromEditor() {
-        compose.mainClock.autoAdvance = false
+        compose.mainClock.autoAdvance = true
         compose.setContent {
             MyApplicationTheme { VideoEditorScreen(ProjectSettings(), null, onBack = {}, autosaveEnabled = false) }
         }

@@ -43,7 +43,7 @@ import kotlin.math.roundToInt
 /** Panels opened from the editor's bottom toolbar, Alight Motion style. */
 enum class EditorPanel(val label: String) {
     Transform("Transform"), Effects("Effect Controls"), Graph("Graph Editor"), Color("Warna"),
-    Blending("Blending & Opacity"), Parent("Parent & Link"), Text("Teks"), Shape("Bentuk"), Model("Model 3D"), Tracker("Tracking Kamera 3D"),
+    Blending("Blending & Opacity"), Parent("Parent & Link"), Text("Teks"), Shape("Bentuk"), Model("Model 3D"), Tracker("Tracking"),
 }
 
 class EditorState(val settings: ProjectSettings, template: Template?, restored: ProjectSnapshot? = null,

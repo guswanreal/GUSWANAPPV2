@@ -98,6 +98,11 @@ class Scene3D(private val layers: List<Layer>, private val time: Float, private 
             FloatArray(16).takeIf { M4.invertM(it, 0, bases.getValue(cam.id), 0) }
         }
     }
+    fun cameraRigMatrix(): FloatArray {
+        val cam=camera ?: return identity()
+        world(cam)
+        return bases.getValue(cam.id).copyOf()
+    }
     private data class CameraPoint(val x:Float,val y:Float,val z:Float,val focalPixels:Float)
     private fun cameraPoint(v: FloatArray, ignoreCamera: Boolean): CameraPoint? {
         val cam=camera.takeUnless { ignoreCamera }
@@ -107,6 +112,7 @@ class Scene3D(private val layers: List<Layer>, private val time: Float, private 
         } else v
         val solve=cam?.cameraSolve
         if(solve!=null) {
+            val controls=cam ?: return null
             val pose=solvedPose ?: return null
             val fitHeight=minOf(size.height,size.width/solve.sourceAspect)
             val k=solve.referenceDepth/solve.focalRatio*size.height/fitHeight
@@ -115,7 +121,15 @@ class Scene3D(private val layers: List<Layer>, private val time: Float, private 
             val px=r[0]*x+r[1]*y+r[2]*z+tr[0]
             val py=r[3]*x+r[4]*y+r[5]*z+tr[1]
             val pz=r[6]*x+r[7]*y+r[8]*z+tr[2]
-            return CameraPoint(px,py,pz,fitHeight*solve.focalRatio)
+            val manual=identity()
+            M4.rotateM(manual,0,-controls.value(Prop.Rotation,time),0f,0f,1f)
+            M4.rotateM(manual,0,-controls.value(Prop.OrbitX,time),1f,0f,0f)
+            M4.rotateM(manual,0,-controls.value(Prop.OrbitY,time),0f,1f,0f)
+            M4.translateM(manual,0,-controls.value(Prop.PosX,time)*size.width/size.height*.5f*k,
+                -controls.value(Prop.PosY,time)*.5f*k,-controls.value(Prop.PosZ,time)*k)
+            val out=FloatArray(4)
+            M4.multiplyMV(out,0,manual,0,floatArrayOf(px,py,pz,1f),0)
+            return CameraPoint(out[0],out[1],out[2],fitHeight*solve.focalRatio*controls.value(Prop.Scale,time).coerceAtLeast(.05f))
         }
         val focal=(.5/tan(PI/6)).toFloat()
         val view=identity()

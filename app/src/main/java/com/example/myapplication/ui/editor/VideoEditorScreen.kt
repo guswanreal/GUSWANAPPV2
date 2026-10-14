@@ -6,6 +6,8 @@ import android.content.ContextWrapper
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.Key
@@ -119,6 +121,9 @@ import androidx.compose.material.icons.rounded.ViewInAr
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.ZoomOutMap
+import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -243,7 +248,11 @@ private fun EditorPanel.short(): String = when (this) {
 
 /** Panels that make sense for a layer type, in toolbar order. */
 private fun panelsFor(type: LayerType): List<EditorPanel> = buildList {
-    if (type == LayerType.Null || type == LayerType.Camera) {
+    if (type == LayerType.Null) {
+        add(EditorPanel.Transform); add(EditorPanel.Effects); add(EditorPanel.Graph); add(EditorPanel.Parent)
+        return@buildList
+    }
+    if(type==LayerType.Camera) {
         add(EditorPanel.Transform); add(EditorPanel.Graph); add(EditorPanel.Parent)
         return@buildList
     }
@@ -277,6 +286,8 @@ fun VideoEditorScreen(settings: ProjectSettings, template: Template?, onBack: ()
     var showAdd by remember { mutableStateOf(false) }
     var showEffects by remember { mutableStateOf(false) }
     var showAssistant by remember { mutableStateOf(false) }
+    var showLayers by remember { mutableStateOf(false) }
+    val largeType=LocalDensity.current.fontScale>=1.5f
     var importing by remember { mutableStateOf(false) }
     var importIntoSelected by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -361,6 +372,11 @@ fun VideoEditorScreen(settings: ProjectSettings, template: Template?, onBack: ()
             event.key==Key.Spacebar -> { state.playing=!state.playing; true }
             event.key==Key.DirectionLeft -> { state.playing=false; state.seek(state.time-state.frame); true }
             event.key==Key.DirectionRight -> { state.playing=false; state.seek(state.time+state.frame); true }
+            event.key==Key.F9 && state.selected!=null -> {
+                val key=state.graphKey ?: state.selected!!.animatedKeys.firstOrNull()
+                if(key!=null) state.setKeyEasing(key,state.graphKeyIndex,com.example.myapplication.engine.Easing.EaseInOut)
+                true
+            }
             event.key==Key.Escape && state.panel!=null -> { state.panel=null; true }
             else -> false
         }
@@ -368,13 +384,28 @@ fun VideoEditorScreen(settings: ProjectSettings, template: Template?, onBack: ()
         EditorTopBar(state, leaveEditor, onExport = { state.playing = false; showExport = true }, saveStatus = if (autosaveEnabled) store.status else "")
         Row(Modifier.fillMaxWidth().background(Ink900).padding(horizontal=12.dp),verticalAlignment=Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Composition",style=MaterialTheme.typography.labelLarge,color=TextHigh)
-                Text("${state.settings.width} × ${state.settings.height} · ${state.fps} fps",style=MonoLabel,color=TextMid)
+                Text("Composition",style=MaterialTheme.typography.labelLarge,color=TextHigh,maxLines=1,overflow=TextOverflow.Ellipsis)
+                Text("${state.settings.width} × ${state.settings.height} · ${state.fps} fps",style=MonoLabel,color=TextMid,maxLines=1,overflow=TextOverflow.Ellipsis)
+            }
+            Box {
+                ToolButton(Icons.Rounded.Layers,"Pilih layer",{showLayers=true},size=44.dp)
+                DropdownMenu(showLayers,{showLayers=false},modifier=Modifier.heightIn(max=360.dp)) {
+                    DropdownMenuItem(text={Text("Tidak ada seleksi")},onClick={state.select(null);showLayers=false})
+                    state.layers.asReversed().forEach { layer ->
+                        DropdownMenuItem(text={Text(layer.name,maxLines=1,overflow=TextOverflow.Ellipsis)},onClick={
+                            state.playing=false; state.select(layer.id)
+                            if(state.time<layer.start || state.time>layer.end) state.seek(layer.start)
+                            showLayers=false
+                        })
+                    }
+                }
             }
             ToolButton(Icons.Rounded.ZoomOutMap,"Tampilkan panduan komposisi",{state.showGuides=!state.showGuides},active=state.showGuides,size=44.dp)
-            TextButton(onClick = { state.playing=false; showAssistant=true }) { Text("Buat Motion",color=TextHigh) }
+            if(largeType) ToolButton(Icons.Rounded.Timeline,"Buat Motion",{state.playing=false;showAssistant=true},size=44.dp)
+            else TextButton(onClick = { state.playing=false; showAssistant=true }) { Text("Buat Motion",color=TextHigh) }
         }
         BoxWithConstraints(Modifier.fillMaxSize()) {
+            val keyboardVisible=WindowInsets.ime.getBottom(LocalDensity.current)>0
             if (maxWidth >= 1000.dp || (maxWidth>=840.dp && maxHeight>=560.dp)) {
                 Row(Modifier.fillMaxSize()) {
                     Column(Modifier.weight(1f).fillMaxHeight()) {
@@ -403,21 +434,21 @@ fun VideoEditorScreen(settings: ProjectSettings, template: Template?, onBack: ()
                         TransportBar(state,compact=true)
                     }
                     Column(Modifier.weight(.56f).fillMaxHeight()) {
-                        TimelineView(state,if(state.panel==null) Modifier.weight(1f).fillMaxWidth() else Modifier.height(112.dp).fillMaxWidth()) { showAdd=true }
+                        if(!keyboardVisible) TimelineView(state,if(state.panel==null) Modifier.weight(1f).fillMaxWidth() else Modifier.height(minOf(112.dp,maxHeight*.24f)).fillMaxWidth()) { showAdd=true }
                         if(state.panel!=null) Box(Modifier.weight(1f)) { panelArea(Modifier.fillMaxSize()) }
-                        EditorToolbar(state,importing,mediaProgress,onAdd={state.addLayer(it)},onImport={startImport(intoSelected=false)},onMedia=::startMedia)
+                        if(!keyboardVisible) EditorToolbar(state,importing,mediaProgress,onAdd={state.addLayer(it)},onImport={startImport(intoSelected=false)},onMedia=::startMedia)
                     }
                 }
             } else {
                 Column(Modifier.fillMaxSize()) {
-                    val maxPreview = this@BoxWithConstraints.maxHeight * if(state.panel==null) .42f else .28f
-                    BoxWithConstraints(Modifier.fillMaxWidth().heightIn(max=maxPreview).background(Ink900).padding(horizontal=12.dp,vertical=10.dp),contentAlignment=Alignment.Center) {
+                    val maxPreview = this@BoxWithConstraints.maxHeight * if(state.panel==null) .42f else if(largeType) .14f else .28f
+                    if(!keyboardVisible) BoxWithConstraints(Modifier.fillMaxWidth().heightIn(max=maxPreview).background(Ink900).padding(horizontal=12.dp,vertical=10.dp),contentAlignment=Alignment.Center) {
                         val previewWidth=minOf(maxWidth,(maxPreview-20.dp).coerceAtLeast(40.dp)*state.settings.aspectValue)
                         PreviewStage(state,Modifier.width(previewWidth).height(previewWidth/state.settings.aspectValue))
                     }
-                    TransportBar(state)
+                    if(!keyboardVisible) TransportBar(state)
                     if(state.panel!=null) {
-                        TimelineView(state,Modifier.height(132.dp).fillMaxWidth().padding(horizontal=8.dp)) { showAdd=true }
+                        if(!keyboardVisible) TimelineView(state,Modifier.height(if(largeType) minOf(132.dp,maxHeight*.18f) else 132.dp).fillMaxWidth().padding(horizontal=8.dp)) { showAdd=true }
                         Box(Modifier.weight(1f).fillMaxWidth()) { panelArea(Modifier.fillMaxSize()) }
                     } else {
                         TimelineView(state,Modifier.weight(1f).fillMaxWidth().padding(horizontal=8.dp).padding(bottom=8.dp)) { showAdd=true }
@@ -474,19 +505,24 @@ private fun EditorTopBar(state: EditorState, onBack: () -> Unit, onExport: () ->
 @Composable
 private fun TransportBar(state: EditorState,compact:Boolean=false) {
     val screenDp = LocalConfiguration.current.screenWidthDp
-    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = if(compact) 4.dp else 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(state.timecode(state.time), style = MonoLabel.copy(fontSize = 17.sp, fontWeight = FontWeight.SemiBold), color = Accent)
-            if(!compact) Text("/ ${state.timecode(state.duration)}", style = MonoLabel, color = TextLow)
+    val roomy=!compact && (LocalDensity.current.fontScale>=1.5f || screenDp<350)
+    Column(Modifier.fillMaxWidth().background(Ink900)) {
+        if(roomy) Row(Modifier.fillMaxWidth().padding(horizontal=14.dp,vertical=6.dp),verticalAlignment=Alignment.CenterVertically) {
+            Text(state.timecode(state.time),style=MonoLabel.copy(fontSize=17.sp,lineHeight=22.sp),color=Accent,modifier=Modifier.weight(1f))
+            Text("/ ${state.timecode(state.duration)}",style=MonoLabel,color=TextMid)
         }
-        ToolButton(Icons.Rounded.SkipPrevious, "Keyframe sebelumnya", { state.jumpKey(null, next = false) }, tint = TextHigh)
-        PlayButton(state)
-        ToolButton(Icons.Rounded.SkipNext, "Keyframe berikutnya", { state.jumpKey(null, next = true) }, tint = TextHigh)
-        if(!compact) Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End) {
-            ToolButton(Icons.Rounded.ZoomOutMap, "Paskan timeline", {
-                state.dpPerSecond = ((screenDp / 2f - 24f) / state.duration).coerceIn(12f, 480f)
-            }, tint = TextMid)
-            ToolButton(Icons.Rounded.Repeat, "Ulang otomatis", { state.loop = !state.loop }, active = state.loop, tint = TextMid)
+        Row(Modifier.fillMaxWidth().heightIn(min=56.dp).padding(horizontal=if(compact) 4.dp else 10.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=if(roomy) Arrangement.Center else Arrangement.Start) {
+            if(!roomy) Column(Modifier.weight(1f)) {
+                Text(state.timecode(state.time),style=MonoLabel.copy(fontSize=17.sp,lineHeight=22.sp,fontWeight=FontWeight.SemiBold),color=Accent,maxLines=1,overflow=TextOverflow.Ellipsis)
+                if(!compact) Text("/ ${state.timecode(state.duration)}",style=MonoLabel,color=TextLow)
+            }
+            ToolButton(Icons.Rounded.SkipPrevious,"Keyframe sebelumnya",{state.jumpKey(null,next=false)},tint=TextHigh)
+            PlayButton(state)
+            ToolButton(Icons.Rounded.SkipNext,"Keyframe berikutnya",{state.jumpKey(null,next=true)},tint=TextHigh)
+            if(!compact) Row(if(roomy) Modifier else Modifier.weight(1f),horizontalArrangement=Arrangement.End) {
+                ToolButton(Icons.Rounded.ZoomOutMap,"Paskan timeline",{state.dpPerSecond=((screenDp/2f-24f)/state.duration).coerceIn(12f,480f)},tint=TextMid)
+                ToolButton(Icons.Rounded.Repeat,"Ulang otomatis",{state.loop=!state.loop},active=state.loop,tint=TextMid)
+            }
         }
     }
 }
@@ -555,7 +591,7 @@ private fun PreviewStage(state: EditorState, modifier: Modifier) {
         ) {
             // Frames snap to the project's rate, so a 24 fps project previews exactly like its export.
             drawComposition(state.layers, state.snap(state.time), measurer, state.selectedId.takeIf { !state.playing }, background = state.settings.background,fps=state.fps)
-            selected?.takeIf { !state.playing && it.faceSolve!=null }?.let { video ->
+            selected?.takeIf { !state.playing && it.type==LayerType.Video && it.faceSolve!=null }?.let { video ->
                 video.faceSolve?.at(state.time)?.landmarks?.forEach { point ->
                     footageToScreen(state.layers,video.id,state.time,size,point[0],point[1])?.let { p ->
                         drawCircle(Ink950,4.dp.toPx(),p)
@@ -578,7 +614,7 @@ private fun PreviewStage(state: EditorState, modifier: Modifier) {
             val l = remember { mutableStateOf(selected) }.apply { if (selected != null) value = selected }.value
             if (l != null) {
                 Row(
-                    Modifier.clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 8.dp, vertical = 4.dp),
+                    Modifier.clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.8f)).padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(Modifier.size(7.dp).clip(CircleShape).background(l.color))
@@ -801,11 +837,10 @@ private fun LayerThumb(type: LayerType) {
         LayerType.Shape -> Canvas(Modifier.size(56.dp)) {
             translate(size.width / 2, size.height / 2) { drawShape(ShapeKind.Star, Pink, size.minDimension * 0.42f, outline = false) }
         }
-        LayerType.Model3D -> ModelPreview(ModelLibrary.byId("robot"), Modifier.size(76.dp), zoom = 1.7f)
+        LayerType.Model3D -> ModelPreview(ModelLibrary.byId("robot"), Modifier.size(76.dp), spin=false,zoom = 1.7f)
         LayerType.Gradient -> Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Violet, Ink950, Blue.copy(alpha = 0.6f)))))
         LayerType.Particles -> {
-            var t by remember { mutableFloatStateOf(0f) }
-            LaunchedEffect(Unit) { val start = withFrameNanos { it }; while (true) withFrameNanos { t = (it - start) / 1e9f } }
+            val t=1.4f
             Canvas(Modifier.fillMaxSize()) {
                 for (i in 0 until 26) {
                     val x = ((i * 37) % 100) / 100f * size.width

@@ -369,7 +369,7 @@ enum class FxType(val label: String, val category: FxCategory, val description: 
     ;
 
     /** Effects that only make sense on certain layer types. */
-    fun appliesTo(type: LayerType): Boolean = when (category) {
+    fun appliesTo(type: LayerType): Boolean = if(type==LayerType.Null) this==Shake || this==Wiggle else when (category) {
         FxCategory.Text -> type == LayerType.Text
         FxCategory.Particles -> type == LayerType.Particles
         else -> type != LayerType.Camera && type != LayerType.Null && (this != Stroke || type == LayerType.Shape)

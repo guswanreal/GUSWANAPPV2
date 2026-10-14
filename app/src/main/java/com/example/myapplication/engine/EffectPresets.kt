@@ -19,6 +19,7 @@ data class EffectPreset(val id: String,val name: String,val description: String,
                 id=="film" && type==FxType.Noise -> EffectInstance.of(type,uid,0 to Track(.08f))
                 id=="film" && type==FxType.Vignette -> EffectInstance.of(type,uid,0 to Track(.3f))
                 id=="cinema" && type==FxType.DeepGlow -> EffectInstance.of(type,uid,0 to Track(28f),1 to Track(.6f))
+                id=="handheld" && type==FxType.Shake -> EffectInstance.of(type,uid,0 to Track(8f),1 to Track(1.6f),2 to Track(.7f),3 to Track(.01f))
                 else -> EffectInstance.of(type,uid)
             }
         }
@@ -34,5 +35,6 @@ val EffectPresets=listOf(
     EffectPreset("wipe","Quick wipe","Wipe dari playhead ke gambar penuh",listOf(FxType.LinearWipe)),
     EffectPreset("film","Film grain","Grain ringan dan vignette",listOf(FxType.Noise,FxType.Vignette)),
     EffectPreset("vhs","VHS tape","Distorsi pita, scanlines dan noise",listOf(FxType.Vhs,FxType.Noise)),
+    EffectPreset("handheld","Handheld rig","Shake halus untuk Null pengendali kamera",listOf(FxType.Shake)),
 )
 

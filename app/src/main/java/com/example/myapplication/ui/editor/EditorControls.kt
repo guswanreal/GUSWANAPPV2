@@ -159,11 +159,14 @@ internal fun PropertyRow(state: EditorState, layer: Layer, key: PropKey, label: 
 
 @Composable
 private fun StopwatchButton(animated: Boolean, name: String, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
     val tint by animateColorAsState(if (animated) Accent else TextLow, tween(160), label = "stopwatch")
     Box(
         Modifier
             .size(44.dp)
             .clip(CircleShape)
+            .border(if(focused) 2.dp else 0.dp,if(focused) Accent else Color.Transparent,CircleShape)
+            .onFocusChanged { focused=it.isFocused }
             .semantics { contentDescription="Animasi $name"; stateDescription=if(animated) "Aktif" else "Nonaktif" }
             .clickable(role = Role.Switch, onClickLabel = if (animated) "Matikan animasi $name" else "Animasikan $name", onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -250,8 +253,13 @@ private fun KeyNavigator(keyHere: Boolean, onPrev: () -> Unit, onToggle: () -> U
 
 @Composable
 private fun NavBox(label: String, onClick: () -> Unit, content: @Composable () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
     Box(
-        Modifier.size(width = 44.dp, height = 44.dp).clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button, onClickLabel = label, onClick = onClick),
+        Modifier.size(width = 44.dp, height = 44.dp).clip(RoundedCornerShape(8.dp))
+            .border(if(focused) 2.dp else 0.dp,if(focused) Accent else Color.Transparent,RoundedCornerShape(8.dp))
+            .onFocusChanged { focused=it.isFocused }
+            .semantics { contentDescription=label }
+            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { content() }
 }

@@ -50,6 +50,8 @@ class ProjectStore(private val directory: File) {
         }
         writer.execute {
             while (true) {
+                // Coalesce gesture snapshots before doing JSON encoding and disk writes.
+                Thread.sleep(120)
                 val next = synchronized(pending) {
                     val key = pending.keys.firstOrNull()
                     if (key == null) { running = false; null } else pending.remove(key)!! to revision

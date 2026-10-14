@@ -287,7 +287,7 @@ internal fun BlendingPanel(state: EditorState, layer: Layer) {
         }
         Panel(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(vertical = 4.dp)) {
-                SwitchRow(if (layer.visible) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, "Video (tampil)", layer.visible) { state.toggleVisible(layer.id) }
+                SwitchRow(if (layer.visible) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, "Tampilkan layer", layer.visible) { state.toggleVisible(layer.id) }
                 SwitchRow(Icons.Rounded.FilterCenterFocus, "Solo", layer.solo) { state.toggleSolo(layer.id) }
                 SwitchRow(if (layer.locked) Icons.Rounded.Lock else Icons.Rounded.LockOpen, "Kunci", layer.locked) { state.toggleLock(layer.id) }
                 SwitchRow(Icons.Rounded.FilterCenterFocus,"Abaikan kamera komposisi",layer.cameraIgnore) {

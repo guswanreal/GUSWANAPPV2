@@ -57,6 +57,20 @@ class MotionUpgradeTest {
         assertFalse(canParentLayer(listOf(layer(1,LayerType.Gradient),cam),2,1))
     }
 
+    @Test fun attachingCameraRigAlsoPreservesExisting2DParallax() {
+        val rig=layer(1,LayerType.Null).withTrack(Prop.OrbitY,Track(35f)).withTrack(Prop.PosX,Track(.2f))
+        val camera=layer(2,LayerType.Camera).withTrack(Prop.OrbitY,Track(25f)).withTrack(Prop.Scale,Track(1.4f))
+        val video=layer(3,LayerType.Video).copy(is3D=false,footage=Footage("f","file:///test",false,640,480,2f,30f,60,"/unused"))
+            .withTrack(Prop.PosZ,Track(.4f))
+        val before=listOf(rig,camera,video)
+        val attached=before.map { if(it.id==2) reparentLayer(before,2,1,0f,size) else it }
+        for(point in listOf(Offset(.1f,.2f),Offset(.7f,.8f))) {
+            val a=footageToScreen(before,3,0f,size,point.x,point.y)!!
+            val b=footageToScreen(attached,3,0f,size,point.x,point.y)!!
+            assertEquals(a.x,b.x,.04f); assertEquals(a.y,b.y,.04f)
+        }
+    }
+
     @Test fun videoTrimPreservesSourceExposureAndCannotExtendPastSource() {
         val f=Footage("test","file:///test",false,640,480,2f,30f,60,"/unused")
         val state=EditorState(ProjectSettings(duration=4f),null)
@@ -68,6 +82,17 @@ class MotionUpgradeTest {
         state.trim(1,0f,2f)
         assertEquals(3f,state.layers.single().end,.001f)
         state.undo()
+    }
+
+    @Test fun solvedCameraStillRespondsToZoomAndPositionControls() {
+        val solve=CameraSolve3D(listOf(CameraPose3D(0f,listOf(1f,0f,0f,0f,1f,0f,0f,0f,1f),listOf(0f,0f,0f),20)),emptyList(),.8660254f,3f,2f)
+        val camera=layer(1,LayerType.Camera).copy(cameraSolve=solve)
+        val shape=layer(2,LayerType.Shape).withTrack(Prop.PosX,Track(.2f))
+        val original=Scene3D(listOf(camera,shape),0f,size).screenPoint(shape,Offset.Zero)!!
+        val zoomed=Scene3D(listOf(camera.withTrack(Prop.Scale,Track(2f)),shape),0f,size).screenPoint(shape,Offset.Zero)!!
+        assertEquals((original.x-size.width/2)*2,zoomed.x-size.width/2,.01f)
+        val moved=Scene3D(listOf(camera.withTrack(Prop.PosX,Track(.1f)),shape),0f,size).screenPoint(shape,Offset.Zero)!!
+        assertTrue(moved.x<original.x-20)
     }
 
     @Test fun faceDetectorAndVideoTrackingProduceEditablePersistedPose()=runBlocking<Unit> {

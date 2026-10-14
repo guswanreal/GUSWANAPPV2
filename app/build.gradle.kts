@@ -20,6 +20,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            if (providers.gradleProperty("cloudPreview").orNull == "true") {
+                applicationIdSuffix = ".preview"
+                versionNameSuffix = "-cloud-preview"
+                resValue("string", "app_name", "Guswaneditor Preview")
+            }
+        }
         release {
             optimization {
                 enable = true

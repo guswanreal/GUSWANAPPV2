@@ -25,6 +25,10 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -94,6 +98,7 @@ internal fun GraphEditorPanel(state: EditorState, layer: Layer, onOpenTransform:
     val spec = layer.specOf(key) ?: return
     var speedMode by remember { mutableStateOf(false) }
     var fitKeys by remember { mutableStateOf(true) }
+    var keyMenu by remember { mutableStateOf(false) }
     val selectedIndex = state.graphKeyIndex?.takeIf { it in track.keys.indices }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -102,10 +107,20 @@ internal fun GraphEditorPanel(state: EditorState, layer: Layer, onOpenTransform:
                 ChoiceChip(shortLabel(layer, k), k == key) { state.graphKey = k; state.graphKeyIndex = null }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
             ChoiceChip("Value Graph", !speedMode) { speedMode = false }
             ChoiceChip("Speed Graph", speedMode) { speedMode = true }
             ChoiceChip(if(fitKeys) "Fit keys" else "Full comp",fitKeys) { fitKeys=!fitKeys }
+            Box {
+                TextButton(onClick={keyMenu=true}) { Text(if(selectedIndex==null) "Pilih key" else "Key ${selectedIndex+1}",color=TextHigh) }
+                DropdownMenu(keyMenu,{keyMenu=false},modifier=Modifier.heightIn(max=280.dp)) {
+                    track.keys.forEachIndexed { index,k ->
+                        DropdownMenuItem(text={Text("Key ${index+1}: ${state.timecode(k.time)}")},onClick={
+                            state.graphKeyIndex=index; state.playing=false; state.seek(k.time); keyMenu=false
+                        })
+                    }
+                }
+            }
         }
         GraphCanvas(state, layer, key, track, speedMode, fitKeys)
         CurveControls(state,layer,key,track,selectedIndex)
@@ -164,8 +179,9 @@ private fun GraphCanvas(state: EditorState, layer: Layer, key: PropKey, track: T
     val measurer = rememberTextMeasurer()
     val haptics = LocalHapticFeedback.current
     val duration = state.duration
-    val timeStart=if(fitKeys && track.keys.size>1) (track.keys.first().time-.08f*(track.keys.last().time-track.keys.first().time)).coerceAtLeast(0f) else 0f
-    val timeEnd=if(fitKeys && track.keys.size>1) (track.keys.last().time+.08f*(track.keys.last().time-track.keys.first().time)).coerceAtMost(duration) else duration
+    var frozenTime by remember(key,speedMode,fitKeys) { mutableStateOf<Pair<Float,Float>?>(null) }
+    val timeStart=frozenTime?.first ?: if(fitKeys && track.keys.size>1) (track.keys.first().time-.08f*(track.keys.last().time-track.keys.first().time)).coerceAtLeast(0f) else 0f
+    val timeEnd=frozenTime?.second ?: if(fitKeys && track.keys.size>1) (track.keys.last().time+.08f*(track.keys.last().time-track.keys.first().time)).coerceAtMost(duration) else duration
     val timeSpan=(timeEnd-timeStart).coerceAtLeast(state.frame)
     val easing = layer.easing
     // Scale factor from model units to displayed units, for speed in px/s, %/s or °/s.
@@ -247,8 +263,11 @@ private fun GraphCanvas(state: EditorState, layer: Layer, key: PropKey, track: T
                     fun keyValue(i:Int)=if(mode) tr.velocityAt(tr.keys[i].time,currentEasing)*uiPerUnit else tr.keys[i].value
                     val hit=tr.keys.indices.minByOrNull { hypot(xOf(tr.keys[it].time)-down.position.x,yOf(keyValue(it))-down.position.y) }
                         ?.takeIf { hypot(xOf(tr.keys[it].time)-down.position.x,yOf(keyValue(it))-down.position.y)<24.dp.toPx() }
-                    if(handle!=null && segment!=null && a!=null && b!=null) {
+                    val handleWins=handle!=null && (hit==null || (handlePoint(handle)-down.position).getDistance()<
+                        (Offset(xOf(tr.keys[hit].time),yOf(keyValue(hit)))-down.position).getDistance())
+                    if(handleWins && handle!=null && segment!=null && a!=null && b!=null) {
                         down.consume(); s.playing=false; frozen=r
+                        frozenTime=start to (start+spanTime)
                         val grab=down.position-handlePoint(handle)
                         drag(down.id) { ch ->
                             ch.consume(); val p=ch.position-grab
@@ -258,12 +277,14 @@ private fun GraphCanvas(state: EditorState, layer: Layer, key: PropKey, track: T
                             s.setBezierHandle(key,segment,handle,influence,speed)
                         }
                         frozen=null
+                        frozenTime=null
                     } else if (hit != null) {
                         down.consume()
                         s.playing=false
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         s.graphKeyIndex = hit
                         frozen = r
+                        frozenTime=start to (start+spanTime)
                         val k0 = tr.keys[hit]
                         val grab = down.position - Offset(xOf(k0.time), yOf(keyValue(hit)))
                         drag(down.id) { ch ->
@@ -272,6 +293,7 @@ private fun GraphCanvas(state: EditorState, layer: Layer, key: PropKey, track: T
                             s.moveKey(key, hit, tOf(p.x), if(mode) k0.value else vOf(p.y))
                         }
                         frozen = null
+                        frozenTime=null
                     } else {
                         s.playing = false
                         s.graphKeyIndex = null
