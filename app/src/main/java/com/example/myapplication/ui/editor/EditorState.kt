@@ -59,6 +59,7 @@ class EditorState(val settings: ProjectSettings, template: Template?, restored: 
     var time by mutableFloatStateOf(restored?.time ?: 0f)
     var playing by mutableStateOf(false)
     var loop by mutableStateOf(true)
+    var showGuides by mutableStateOf(false)
 
     var panel by mutableStateOf<EditorPanel?>(null)
     var parentError by mutableStateOf<String?>(null)
@@ -453,3 +454,4 @@ fun formatTimecode(t: Float, fps: Int): String {
     val digits = if (fps > 99) "%03d" else "%02d"
     return "%02d:%02d:".format(s / 60, s % 60) + digits.format(f)
 }
+

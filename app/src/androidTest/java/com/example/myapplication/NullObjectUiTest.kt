@@ -40,7 +40,7 @@ class NullObjectUiTest {
             MyApplicationTheme { VideoEditorScreen(ProjectSettings(), null, onBack = {}, autosaveEnabled = false) }
         }
         compose.mainClock.advanceTimeBy(1000)
-        compose.onNodeWithText("AI / Buat Motion").performClick()
+        compose.onNodeWithText("Buat Motion").performClick()
         compose.mainClock.advanceTimeBy(1000)
         compose.onNodeWithText("Buat motion di timeline").performScrollTo().performClick()
         compose.mainClock.advanceTimeBy(1000)
@@ -48,3 +48,4 @@ class NullObjectUiTest {
         compose.onNodeWithText("Mode 3D").assertIsDisplayed()
     }
 }
+
