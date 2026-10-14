@@ -38,6 +38,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
@@ -101,11 +103,15 @@ internal fun EffectsBrowserSheet(onDismiss: () -> Unit, layerType:LayerType=Laye
                 item { ChoiceChip("Semua", category == null) { category = null } }
                 items(FxCategory.entries, key = { it.name }) { c -> ChoiceChip(c.label, category == c) { category = c } }
             }
-            LazyColumn(contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp)) {
+            LazyColumn(modifier=Modifier.testTag("effects-list"),contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp)) {
                 if(presets && onPreset!=null) {
                     val found=EffectPresets.filter { it.appliesTo(layerType) && (q.isEmpty() || it.name.contains(q,true) || it.description.contains(q,true) || it.types.any { t -> t.label.contains(q,true) }) }
                     items(found,key={it.id}) { preset ->
-                        Row(Modifier.fillMaxWidth().heightIn(min=80.dp).clickable(onClickLabel="Tambah preset ${preset.name}") { onPreset(preset) }.padding(horizontal=20.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically) {
+                        var focused by remember { mutableStateOf(false) }
+                        Row(Modifier.fillMaxWidth().heightIn(min=80.dp)
+                            .border(if(focused) 2.dp else 0.dp,if(focused) TextHigh else androidx.compose.ui.graphics.Color.Transparent)
+                            .onFocusChanged { focused=it.isFocused }
+                            .clickable(onClickLabel="Tambah preset ${preset.name}") { onPreset(preset) }.padding(horizontal=20.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(preset.name,style=MaterialTheme.typography.titleMedium,color=TextHigh)
                                 Text(preset.description,style=MaterialTheme.typography.bodySmall,color=TextMid)
@@ -132,10 +138,13 @@ internal fun EffectsBrowserSheet(onDismiss: () -> Unit, layerType:LayerType=Laye
 @Composable
 private fun EffectRow(type: FxType, measurer: TextMeasurer, onClick: () -> Unit) {
     val sample = remember(type) { sampleLayers(type) }
+    var focused by remember { mutableStateOf(false) }
     Row(
         Modifier
             .fillMaxWidth()
             .heightIn(min = 72.dp)
+            .border(if(focused) 2.dp else 0.dp,if(focused) TextHigh else androidx.compose.ui.graphics.Color.Transparent)
+            .onFocusChanged { focused=it.isFocused }
             .clickable(role = Role.Button, onClickLabel = "Tambah ${type.label}", onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
