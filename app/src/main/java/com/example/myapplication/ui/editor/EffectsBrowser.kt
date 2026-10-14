@@ -45,6 +45,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.TextMeasurer
@@ -83,6 +84,7 @@ internal fun EffectsBrowserSheet(onDismiss: () -> Unit, layerType:LayerType=Laye
         var presets by remember { mutableStateOf(false) }
         val keyboardVisible=WindowInsets.ime.getBottom(LocalDensity.current)>0
         val keyboard=LocalSoftwareKeyboardController.current
+        val focus=LocalFocusManager.current
         val measurer = rememberTextMeasurer(COMPOSITION_TEXT_CACHE)
         val q = query.trim()
         val matches = FxType.entries.filter { t ->
@@ -103,7 +105,7 @@ internal fun EffectsBrowserSheet(onDismiss: () -> Unit, layerType:LayerType=Laye
                 onValueChange = { query = it },
                 singleLine = true,
                 keyboardOptions=KeyboardOptions(imeAction=ImeAction.Search),
-                keyboardActions=KeyboardActions(onSearch={keyboard?.hide()}),
+                keyboardActions=KeyboardActions(onSearch={focus.clearFocus();keyboard?.hide()}),
                 leadingIcon = { Icon(Icons.Rounded.Search, null, tint = TextMid) },
                 placeholder = { Text("Cari: blur, glow, wipe, glitch…", color = TextLow) },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
