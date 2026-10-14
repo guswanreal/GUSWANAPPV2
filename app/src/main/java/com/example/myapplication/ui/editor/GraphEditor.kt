@@ -48,6 +48,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -181,6 +182,9 @@ private fun GraphCanvas(state: EditorState, layer: Layer, key: PropKey, track: T
     val measurer = rememberTextMeasurer()
     val haptics = LocalHapticFeedback.current
     val shortLandscape=LocalConfiguration.current.let { it.screenWidthDp>it.screenHeightDp*1.35f && it.screenHeightDp<520 }
+    val fontScale=LocalDensity.current.fontScale.coerceAtLeast(1f)
+    val leftPadding=PadLeft*fontScale
+    val bottomPadding=PadBottom*fontScale
     val duration = state.duration
     var frozenTime by remember(key,speedMode,fitKeys) { mutableStateOf<Pair<Float,Float>?>(null) }
     val timeStart=frozenTime?.first ?: if(fitKeys && track.keys.size>1) (track.keys.first().time-.08f*(track.keys.last().time-track.keys.first().time)).coerceAtLeast(0f) else 0f
@@ -242,11 +246,11 @@ private fun GraphCanvas(state: EditorState, layer: Layer, key: PropKey, track: T
             .background(Ink950)
             .border(1.dp, Line, RoundedCornerShape(12.dp))
             .semantics { contentDescription = "Graph editor ${spec.label}. Seret kotak key untuk memindahkannya, seret area kosong untuk memindah playhead." }
-            .pointerInput(key, speedMode, fitKeys) {
+            .pointerInput(key, speedMode, fitKeys, fontScale) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
-                    val left = PadLeft.toPx(); val right = size.width - PadRight.toPx()
-                    val top = PadTop.toPx(); val bottom = size.height - PadBottom.toPx()
+                    val left = leftPadding.toPx(); val right = size.width - PadRight.toPx()
+                    val top = PadTop.toPx(); val bottom = size.height - bottomPadding.toPx()
                     val w = right - left; val h = bottom - top
                     val span = (r.endInclusive - r.start).takeIf { it > 0f } ?: 1f
                     fun xOf(t: Float) = left + (t-start) / spanTime * w
@@ -313,8 +317,8 @@ private fun GraphCanvas(state: EditorState, layer: Layer, key: PropKey, track: T
                 }
             }
     ) {
-        val left = PadLeft.toPx(); val right = size.width - PadRight.toPx()
-        val top = PadTop.toPx(); val bottom = size.height - PadBottom.toPx()
+        val left = leftPadding.toPx(); val right = size.width - PadRight.toPx()
+        val top = PadTop.toPx(); val bottom = size.height - bottomPadding.toPx()
         val w = right - left; val h = bottom - top
         fun xOf(t: Float) = left + (t-timeStart) / timeSpan * w
         val lo = range.start
@@ -326,20 +330,22 @@ private fun GraphCanvas(state: EditorState, layer: Layer, key: PropKey, track: T
         drawRect(Color.Black.copy(alpha = 0.35f), Offset(xOf(layer.end).coerceIn(left,right), top), Size((right - xOf(layer.end)).coerceIn(0f,w), h))
 
         val label = MonoLabel.copy(color = TextLow)
-        for (i in 0..4) {
-            val y = top + h * i / 4f
+        val verticalTicks=if(shortLandscape) (if(fontScale>=1.5f) 1 else 2) else if(fontScale>=1.5f) 2 else 4
+        for (i in 0..verticalTicks) {
+            val y = top + h * i / verticalTicks
             drawLine(Line, Offset(left, y), Offset(right, y), 1f)
-            val v = hi - (hi - lo) * i / 4f
+            val v = hi - (hi - lo) * i / verticalTicks
             val text = if (speedMode) "%.0f/s".format(v) else unit.format(unit.toUi(v))
             val layout = measurer.measure(text.take(9), label)
             drawText(layout, topLeft = Offset(4.dp.toPx(), y - layout.size.height / 2f))
         }
-        for (i in 0..4) {
-            val sec=timeStart+timeSpan*i/4f
+        val horizontalTicks=if(fontScale>=1.5f) 2 else 4
+        for (i in 0..horizontalTicks) {
+            val sec=timeStart+timeSpan*i/horizontalTicks
             val x = xOf(sec)
             drawLine(Line, Offset(x, top), Offset(x, bottom), 1f)
             val layout = measurer.measure("%.1fs".format(sec), label)
-            drawText(layout, topLeft = Offset(x - layout.size.width / 2f, bottom + 4.dp.toPx()))
+            drawText(layout, topLeft = Offset((x-layout.size.width/2f).coerceIn(4.dp.toPx(),(size.width-layout.size.width-4.dp.toPx()).coerceAtLeast(4.dp.toPx())),bottom+4.dp.toPx()))
         }
 
         val curve = Path()

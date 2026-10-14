@@ -63,6 +63,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.myapplication.engine.BlendKind
@@ -472,10 +473,12 @@ private fun ModelTile(id: String?, name: String, active: Boolean, onClick: () ->
 @Composable
 internal fun PanelTitle(panel: EditorPanel, layer: Layer) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(panel.label, style = MaterialTheme.typography.titleMedium, color = TextHigh, modifier = Modifier.weight(1f))
-        Box(Modifier.size(8.dp).clip(CircleShape).background(layer.color))
-        Spacer(Modifier.width(6.dp))
-        Text(layer.name, style = MonoLabel, color = TextMid, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 160.dp))
+        Text(panel.label, style = MaterialTheme.typography.titleMedium, color = TextHigh, modifier = Modifier.weight(1f),maxLines=1,overflow=TextOverflow.Ellipsis)
+        if(LocalDensity.current.fontScale<1.5f) {
+            Box(Modifier.size(8.dp).clip(CircleShape).background(layer.color))
+            Spacer(Modifier.width(6.dp))
+            Text(layer.name, style = MonoLabel, color = TextMid, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 160.dp))
+        }
     }
 }
 

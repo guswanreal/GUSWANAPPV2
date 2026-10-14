@@ -6,7 +6,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.myapplication.engine.*
@@ -20,7 +20,7 @@ import java.io.File
 @RunWith(AndroidJUnit4::class)
 @OptIn(ExperimentalTestApi::class)
 class EditorWorkspaceUiTest {
-    @get:Rule val compose=createComposeRule()
+    @get:Rule val compose=createAndroidComposeRule<androidx.activity.ComponentActivity>()
     private val context get()=InstrumentationRegistry.getInstrumentation().targetContext
     private fun tool(name:String) {
         compose.onNodeWithTag("editor-toolbar").performScrollToNode(hasText(name))
@@ -28,6 +28,11 @@ class EditorWorkspaceUiTest {
         android.util.Log.i("EditorUiQa","Opened $name")
     }
     private fun open(layerOverride:Layer?=null) {
+        val landscape=InstrumentationRegistry.getArguments().getString("qaOrientation")=="landscape"
+        compose.runOnUiThread {
+            compose.activity.requestedOrientation=if(landscape) android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
+        compose.waitUntil(10000) { compose.activity.resources.configuration.orientation==if(landscape) android.content.res.Configuration.ORIENTATION_LANDSCAPE else android.content.res.Configuration.ORIENTATION_PORTRAIT }
         android.util.Log.i("EditorUiQa","Creating editor content")
         compose.mainClock.autoAdvance=true
         val settings=ProjectSettings(name="Motion study",duration=6f)
@@ -40,6 +45,7 @@ class EditorWorkspaceUiTest {
     private fun capture(name:String) {
         val bitmap=compose.onRoot().captureToImage().asAndroidBitmap()
         val orientation=if(bitmap.width>bitmap.height) "landscape" else "portrait"
+        org.junit.Assert.assertEquals(InstrumentationRegistry.getArguments().getString("qaOrientation") ?: "portrait",orientation)
         val scale=context.resources.configuration.fontScale
         val directory=File(context.filesDir,"qa").apply { mkdirs() }
         File(directory,"$name-$orientation-${if(scale>1.5f) "large-type" else "default"}.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG,100,it) }
@@ -58,9 +64,10 @@ class EditorWorkspaceUiTest {
         }
         compose.mainClock.advanceTimeBy(1000)
         compose.onNodeWithText("Speed Graph").performScrollTo().performClick()
-        compose.onNodeWithText("Value Graph").performClick()
-        compose.onNodeWithText("Fit keys").performClick()
-        compose.onNodeWithText("Full comp").performClick()
+        compose.onNodeWithText("Value Graph").performScrollTo().performClick()
+        compose.onNodeWithText("Value Graph").assertIsSelected()
+        compose.onNodeWithText("Fit keys").performScrollTo().performClick()
+        compose.onNodeWithText("Full comp").performScrollTo().performClick()
         compose.onNodeWithText("Semua segmen").performScrollTo().performClick()
         compose.onNodeWithText("Segmen 1").performClick()
         compose.onNodeWithText("Key 1").performScrollTo().performClick()

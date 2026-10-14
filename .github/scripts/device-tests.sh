@@ -16,13 +16,13 @@ run_tests() {
   timeout 420 adb shell am instrument -w -r -e timeout_msec 120000 "$@" "$app_id.test/androidx.test.runner.AndroidJUnitRunner" | tee "work-ui/instrumentation-$label.log"
   grep -Eq '^OK \([0-9]+ tests?\)' "work-ui/instrumentation-$label.log"
 }
-run_tests portrait || result=$?
+run_tests portrait -e qaOrientation portrait || result=$?
 adb shell settings put system accelerometer_rotation 0
 adb shell wm user-rotation lock 1
-run_tests landscape -e class com.example.myapplication.EditorWorkspaceUiTest || result=$?
+run_tests landscape -e qaOrientation landscape -e class com.example.myapplication.EditorWorkspaceUiTest || result=$?
 adb shell wm user-rotation lock 0
 adb shell settings put system font_scale 2.0
-run_tests large-type -e class com.example.myapplication.EditorWorkspaceUiTest || result=$?
+run_tests large-type -e qaOrientation portrait -e class com.example.myapplication.EditorWorkspaceUiTest || result=$?
 for screen in editor graph; do
   for viewport in portrait landscape; do
     for type in default large-type; do
