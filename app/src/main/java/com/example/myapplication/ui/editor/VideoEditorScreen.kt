@@ -6,6 +6,7 @@ import android.content.ContextWrapper
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.focusable
@@ -367,8 +368,26 @@ fun VideoEditorScreen(settings: ProjectSettings, template: Template?, onBack: ()
     val panelArea: @Composable (Modifier) -> Unit = { m ->
         PanelSheet(state, m, importing, onBrowse = { showEffects = true }, onImport = { startImport(intoSelected = true) })
     }
+    val workspaceActions: @Composable () -> Unit = {
+        Box {
+            ToolButton(Icons.Rounded.Layers,"Pilih layer",{showLayers=true},size=44.dp)
+            DropdownMenu(showLayers,{showLayers=false},modifier=Modifier.heightIn(max=360.dp)) {
+                DropdownMenuItem(text={Text("Tidak ada seleksi")},onClick={state.select(null);showLayers=false})
+                state.layers.asReversed().forEach { layer ->
+                    DropdownMenuItem(text={Text(layer.name,maxLines=1,overflow=TextOverflow.Ellipsis)},onClick={
+                        state.playing=false; state.select(layer.id)
+                        if(state.time<layer.start || state.time>layer.end) state.seek(layer.start)
+                        showLayers=false
+                    })
+                }
+            }
+        }
+        ToolButton(Icons.Rounded.ZoomOutMap,"Tampilkan panduan komposisi",{state.showGuides=!state.showGuides},active=state.showGuides,size=44.dp)
+        if(largeType || shortLandscape) ToolButton(Icons.Rounded.Timeline,"Buat Motion",{state.playing=false;showAssistant=true},size=44.dp)
+        else TextButton(onClick = { state.playing=false; showAssistant=true }) { Text("Buat Motion",color=TextHigh) }
+    }
 
-    Column(Modifier.fillMaxSize().background(Ink950).imePadding().testTag("editor-workspace").onKeyEvent { event ->
+    Column(Modifier.fillMaxSize().background(Ink950).safeDrawingPadding().imePadding().testTag("editor-workspace").onKeyEvent { event ->
         if(event.type!=KeyEventType.KeyDown) false else when {
             event.isCtrlPressed && event.key==Key.Z && event.isShiftPressed -> { state.redo(); true }
             event.isCtrlPressed && event.key==Key.Z -> { state.undo(); true }
@@ -384,28 +403,13 @@ fun VideoEditorScreen(settings: ProjectSettings, template: Template?, onBack: ()
             else -> false
         }
     }.focusable()) {
-        EditorTopBar(state, leaveEditor, onExport = { state.playing = false; showExport = true }, saveStatus = if (autosaveEnabled) store.status else "")
-        Row(Modifier.fillMaxWidth().background(Ink900).padding(horizontal=12.dp),verticalAlignment=Alignment.CenterVertically) {
+        EditorTopBar(state, leaveEditor, onExport = { state.playing = false; showExport = true }, saveStatus = if (autosaveEnabled) store.status else "",extras={if(shortLandscape) workspaceActions()})
+        if(!shortLandscape) Row(Modifier.fillMaxWidth().background(Ink900).padding(horizontal=12.dp),verticalAlignment=Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 if(!shortLandscape) Text("Composition",style=MaterialTheme.typography.labelLarge,color=TextHigh,maxLines=1,overflow=TextOverflow.Ellipsis)
                 Text("${state.settings.width} × ${state.settings.height}${if(shortLandscape) "" else " · ${state.fps} fps"}",style=MonoLabel,color=TextMid,maxLines=1,overflow=TextOverflow.Ellipsis)
             }
-            Box {
-                ToolButton(Icons.Rounded.Layers,"Pilih layer",{showLayers=true},size=44.dp)
-                DropdownMenu(showLayers,{showLayers=false},modifier=Modifier.heightIn(max=360.dp)) {
-                    DropdownMenuItem(text={Text("Tidak ada seleksi")},onClick={state.select(null);showLayers=false})
-                    state.layers.asReversed().forEach { layer ->
-                        DropdownMenuItem(text={Text(layer.name,maxLines=1,overflow=TextOverflow.Ellipsis)},onClick={
-                            state.playing=false; state.select(layer.id)
-                            if(state.time<layer.start || state.time>layer.end) state.seek(layer.start)
-                            showLayers=false
-                        })
-                    }
-                }
-            }
-            ToolButton(Icons.Rounded.ZoomOutMap,"Tampilkan panduan komposisi",{state.showGuides=!state.showGuides},active=state.showGuides,size=44.dp)
-            if(largeType || shortLandscape) ToolButton(Icons.Rounded.Timeline,"Buat Motion",{state.playing=false;showAssistant=true},size=44.dp)
-            else TextButton(onClick = { state.playing=false; showAssistant=true }) { Text("Buat Motion",color=TextHigh) }
+            workspaceActions()
         }
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val keyboardVisible=WindowInsets.ime.getBottom(LocalDensity.current)>0
@@ -491,7 +495,7 @@ fun VideoEditorScreen(settings: ProjectSettings, template: Template?, onBack: ()
 // ---------------------------------------------------------------- Top bar & transport
 
 @Composable
-private fun EditorTopBar(state: EditorState, onBack: () -> Unit, onExport: () -> Unit, saveStatus: String) {
+private fun EditorTopBar(state: EditorState, onBack: () -> Unit, onExport: () -> Unit, saveStatus: String,extras:@Composable ()->Unit={}) {
     Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         ToolButton(Icons.AutoMirrored.Rounded.ArrowBack, "Kembali", onBack, tint = TextHigh)
         Column(Modifier.weight(1f).padding(start = 2.dp)) {
@@ -500,6 +504,7 @@ private fun EditorTopBar(state: EditorState, onBack: () -> Unit, onExport: () ->
         }
         ToolButton(Icons.AutoMirrored.Rounded.Undo, "Urungkan", state::undo, enabled = state.canUndo, tint = TextHigh)
         ToolButton(Icons.AutoMirrored.Rounded.Redo, "Ulangi", state::redo, enabled = state.canRedo, tint = TextHigh)
+        extras()
         Spacer(Modifier.width(4.dp))
         ActionButton("Ekspor", onExport, icon = Icons.Rounded.FileUpload, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp))
         Spacer(Modifier.width(8.dp))

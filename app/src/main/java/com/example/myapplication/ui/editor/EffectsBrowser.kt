@@ -46,6 +46,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.TextMeasurer
@@ -85,6 +86,7 @@ internal fun EffectsBrowserSheet(onDismiss: () -> Unit, layerType:LayerType=Laye
         val keyboardVisible=WindowInsets.ime.getBottom(LocalDensity.current)>0
         val keyboard=LocalSoftwareKeyboardController.current
         val focus=LocalFocusManager.current
+        val shortLandscape=LocalConfiguration.current.let { it.screenWidthDp>it.screenHeightDp*1.35f && it.screenHeightDp<520 }
         val measurer = rememberTextMeasurer(COMPOSITION_TEXT_CACHE)
         val q = query.trim()
         val matches = FxType.entries.filter { t ->
@@ -92,7 +94,7 @@ internal fun EffectsBrowserSheet(onDismiss: () -> Unit, layerType:LayerType=Laye
                 (q.isEmpty() || t.label.contains(q, true) || t.description.contains(q, true) || t.category.label.contains(q, true))
         }
         Column(Modifier.fillMaxHeight(0.92f)) {
-            if(!keyboardVisible) Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+            if(!keyboardVisible && !shortLandscape) Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Effects & Presets", style = MaterialTheme.typography.titleLarge, color = TextHigh, modifier = Modifier.weight(1f))
                 Text("${FxType.entries.count { it.appliesTo(layerType) }} efek", style = MonoLabel, color = TextLow)
             }
@@ -112,11 +114,9 @@ internal fun EffectsBrowserSheet(onDismiss: () -> Unit, layerType:LayerType=Laye
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Accent, unfocusedBorderColor = LineStrong),
             )
-            if(!presets && !keyboardVisible) LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                item { ChoiceChip("Semua", category == null) { category = null } }
-                items(FxCategory.entries, key = { it.name }) { c -> ChoiceChip(c.label, category == c) { category = c } }
-            }
+            if(!presets && !keyboardVisible && !shortLandscape) CategoryFilters(category) {category=it}
             LazyColumn(modifier=Modifier.testTag("effects-list"),contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp)) {
+                if(!presets && !keyboardVisible && shortLandscape) item(key="categories") {CategoryFilters(category) {category=it}}
                 if(presets && onPreset!=null) {
                     val found=EffectPresets.filter { it.appliesTo(layerType) && (q.isEmpty() || it.name.contains(q,true) || it.description.contains(q,true) || it.types.any { t -> t.label.contains(q,true) }) }
                     items(found,key={it.id}) { preset ->
@@ -145,6 +145,14 @@ internal fun EffectsBrowserSheet(onDismiss: () -> Unit, layerType:LayerType=Laye
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CategoryFilters(category:FxCategory?,onPick:(FxCategory?)->Unit) {
+    LazyRow(contentPadding=PaddingValues(horizontal=16.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+        item {ChoiceChip("Semua",category==null) {onPick(null)}}
+        items(FxCategory.entries,key={it.name}) {c->ChoiceChip(c.label,category==c) {onPick(c)}}
     }
 }
 
