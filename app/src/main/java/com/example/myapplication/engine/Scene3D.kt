@@ -16,8 +16,20 @@ data class CameraSolve3D(
     val focalRatio: Float, val referenceDepth: Float, val solvedUntil: Float,
     val sourceAspect: Float = 16f/9f,
 ) {
-    // Nearest solved exposure: do not interpolate rotation matrix coefficients.
-    fun at(t: Float): CameraPose3D? = poses.minByOrNull { kotlin.math.abs(it.time - t) }
+    fun at(t: Float): CameraPose3D? {
+        if (poses.isEmpty()) return null
+        if (t <= poses.first().time) return poses.first()
+        if (t >= poses.last().time) return poses.last()
+        var lo = 0; var hi = poses.lastIndex
+        while (hi - lo > 1) {
+            val mid = (lo + hi) / 2
+            if (poses[mid].time <= t) lo = mid else hi = mid
+        }
+        val a = poses[lo]; val b = poses[hi]
+        val u = ((t - a.time) / (b.time - a.time)).coerceIn(0f, 1f)
+        return CameraPose3D(t, interpolateRotation(a.rotation, b.rotation, u),
+            List(3) { a.translation[it] + (b.translation[it] - a.translation[it]) * u }, minOf(a.inliers, b.inliers))
+    }
     fun toJson() = JSONObject().put("focal",focalRatio).put("depth",referenceDepth).put("until",solvedUntil).put("aspect",sourceAspect)
         .put("poses",JSONArray(poses.map { p -> JSONObject().put("time",p.time).put("r",JSONArray(p.rotation)).put("t",JSONArray(p.translation)).put("inliers",p.inliers) }))
         .put("points",JSONArray(points.map { JSONArray(listOf(it.x,it.y,it.z)) }))
@@ -80,15 +92,25 @@ class Scene3D(private val layers: List<Layer>, private val time: Float, private 
 
     private val camera=layers.lastOrNull { it.type==LayerType.Camera && it.activeAt(time) }
     private val solvedPose=camera?.cameraSolve?.at(time)
+    private val inverseRig: FloatArray? by lazy {
+        camera?.let { cam ->
+            world(cam)
+            FloatArray(16).takeIf { M4.invertM(it, 0, bases.getValue(cam.id), 0) }
+        }
+    }
     private data class CameraPoint(val x:Float,val y:Float,val z:Float,val focalPixels:Float)
     private fun cameraPoint(v: FloatArray, ignoreCamera: Boolean): CameraPoint? {
         val cam=camera.takeUnless { ignoreCamera }
+        val input = if (cam != null) {
+            val inverse = inverseRig ?: return null
+            FloatArray(4).also { M4.multiplyMV(it, 0, inverse, 0, v, 0) }
+        } else v
         val solve=cam?.cameraSolve
         if(solve!=null) {
             val pose=solvedPose ?: return null
             val fitHeight=minOf(size.height,size.width/solve.sourceAspect)
             val k=solve.referenceDepth/solve.focalRatio*size.height/fitHeight
-            val x=v[0]*k; val y=v[1]*k; val z=solve.referenceDepth+v[2]*k
+            val x=input[0]*k; val y=input[1]*k; val z=solve.referenceDepth+input[2]*k
             val r=pose.rotation; val tr=pose.translation
             val px=r[0]*x+r[1]*y+r[2]*z+tr[0]
             val py=r[3]*x+r[4]*y+r[5]*z+tr[1]
@@ -97,7 +119,7 @@ class Scene3D(private val layers: List<Layer>, private val time: Float, private 
         }
         val focal=(.5/tan(PI/6)).toFloat()
         val view=identity()
-        val target=cam?.targetId?.let(byId::get)?.let { world(it) }
+        val target=cam?.targetId?.takeIf { it != cam.id }?.let(byId::get)?.let { world(it) }
         val x=(cam?.value(Prop.PosX,time) ?: 0f)*size.width/size.height/2+(target?.get(12) ?: 0f)
         val y=(cam?.value(Prop.PosY,time) ?: 0f)/2+(target?.get(13) ?: 0f)
         M4.translateM(view,0,0f,0f,focal/(cam?.value(Prop.Scale,time) ?: 1f).coerceAtLeast(.05f))
@@ -105,7 +127,7 @@ class Scene3D(private val layers: List<Layer>, private val time: Float, private 
         M4.rotateM(view,0,-(cam?.value(Prop.OrbitX,time) ?: 0f),1f,0f,0f)
         M4.rotateM(view,0,-(cam?.value(Prop.OrbitY,time) ?: 0f),0f,1f,0f)
         M4.translateM(view,0,-x,-y,-(cam?.value(Prop.PosZ,time) ?: 0f))
-        val out=FloatArray(4); M4.multiplyMV(out,0,view,0,v,0)
+        val out=FloatArray(4); M4.multiplyMV(out,0,view,0,input,0)
         return CameraPoint(out[0],out[1],out[2],size.height*focal)
     }
 
@@ -139,6 +161,24 @@ class Scene3D(private val layers: List<Layer>, private val time: Float, private 
         return project(out,layer.cameraIgnore)
     }
 
+    fun cameraPlaneMatrix(depth: Float): Matrix? {
+        val src = floatArrayOf(0f, 0f, size.width, 0f, size.width, size.height, 0f, size.height)
+        val dst = FloatArray(8)
+        for (i in 0..3) {
+            val p = project(floatArrayOf((src[i*2]-size.width/2)/size.height,
+                (src[i*2+1]-size.height/2)/size.height, depth, 1f), false) ?: return null
+            dst[i*2] = p.x; dst[i*2+1] = p.y
+        }
+        val native = android.graphics.Matrix()
+        if (!native.setPolyToPoly(src, 0, dst, 0, 4)) return null
+        val v = FloatArray(9); native.getValues(v)
+        return Matrix().apply {
+            values[0]=v[0]; values[1]=v[3]; values[3]=v[6]
+            values[4]=v[1]; values[5]=v[4]; values[7]=v[7]
+            values[12]=v[2]; values[13]=v[5]; values[15]=v[8]
+        }
+    }
+
     fun matrix(layer: Layer): Matrix? {
         // Homography is exact for a plane; no per-pixel mesh tessellation is needed.
         val u=size.minDimension*.5f
@@ -156,8 +196,8 @@ class Scene3D(private val layers: List<Layer>, private val time: Float, private 
     }
 }
 
-fun Layer.supports3D() = type in setOf(LayerType.Text,LayerType.Shape,LayerType.Image,LayerType.Video,LayerType.Null)
-fun Layer.transformProperties(): List<Prop> = if(is3D && supports3D())
+fun Layer.supports3D() = type in setOf(LayerType.Text,LayerType.Shape,LayerType.Image,LayerType.Video,LayerType.Null,LayerType.Camera)
+fun Layer.transformProperties(): List<Prop> = if(type == LayerType.Camera) type.transformProps() else if(is3D && supports3D())
     listOf(Prop.AnchorX,Prop.AnchorY,Prop.PosX,Prop.PosY,Prop.PosZ,Prop.Scale,Prop.Rotation,Prop.OrbitX,Prop.OrbitY)
         .let { if(type==LayerType.Null) it else it+Prop.Opacity }
     else type.transformProps()

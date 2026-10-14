@@ -195,6 +195,11 @@ private fun Scene.cameraAt(t: Float): CamState? {
 /** Comp → screen for a layer at its Position Z: farther layers shrink and move less (parallax). */
 private fun Scene.cameraMatrix(cam: CamState?, layer: Layer, t: Float): Matrix? {
     if (cam == null || layer.cameraIgnore || layer.type == LayerType.Gradient) return null
+    val camera = layers.lastOrNull { it.type == LayerType.Camera && it.activeAt(t) }
+    if (camera?.parentId != null || camera?.spatialOffset?.isNotEmpty() == true) {
+        return space(t).cameraPlaneMatrix(layer.value(Prop.PosZ, t))
+            ?: Matrix().apply { scale(0f, 0f) }
+    }
     val depth = if (Prop.PosZ in layer.type.transformProps()) layer.value(Prop.PosZ, t) else 0f
     val k = cam.zoom / (1f + depth).coerceAtLeast(0.15f)
     val shiftX = -sin(cam.orbitY * (PI / 180.0).toFloat()) * depth * size.width * 0.5f * k

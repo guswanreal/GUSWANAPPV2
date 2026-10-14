@@ -101,7 +101,8 @@ data class Track(val static: Float, val keys: List<Keyframe> = emptyList(), val 
         if (keys.isEmpty()) return static
         var t = time
         val first = keys.first(); val last = keys.last()
-        if (loop && keys.size >= 2 && t > last.time) t = first.time + (t - first.time) % (last.time - first.time)
+        val period = last.time - first.time
+        if (loop && keys.size >= 2 && period > KEY_EPS && t > last.time) t = first.time + (t - first.time) % period
         if (t <= first.time) return first.value
         if (t >= last.time) return last.value
         var i = 0
@@ -129,10 +130,12 @@ fun segmentValue(a: Keyframe, b: Keyframe, t: Float, easing: Easing): Float {
     val u = ((t - a.time) / dt).coerceIn(0f, 1f)
     if (easing == Easing.Bezier) {
         // After Effects temporal bezier: control points sit at influence × duration, sloped by speed.
-        val x1 = a.outInfluence.coerceIn(0.001f, 1f)
-        val x2 = 1f - b.inInfluence.coerceIn(0.001f, 1f)
-        val y1 = a.value + a.outSpeed * a.outInfluence * dt
-        val y2 = b.value - b.inSpeed * b.inInfluence * dt
+        val out = a.outInfluence.coerceIn(0.001f, 1f)
+        val incoming = b.inInfluence.coerceIn(0.001f, 1f)
+        val x1 = out
+        val x2 = 1f - incoming
+        val y1 = a.value + a.outSpeed * out * dt
+        val y2 = b.value - b.inSpeed * incoming * dt
         return cubic(a.value, y1, y2, b.value, solveBezierX(x1, x2, u))
     }
     return a.value + (b.value - a.value) * ease(u, easing)
@@ -422,6 +425,7 @@ data class Layer(
     /** A flat content plane in perspective; preserves normal 2D behavior when disabled. */
     val is3D: Boolean = false,
     val cameraSolve: CameraSolve3D? = null,
+    val faceSolve: FaceSolve3D? = null,
     val spatialOffset: List<Float> = emptyList(),
 ) {
     fun track(p: Prop) = tracks[p] ?: Track(p.default)

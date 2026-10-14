@@ -5,6 +5,15 @@ import android.content.Context
 import android.content.ContextWrapper
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.platform.LocalView
@@ -166,6 +175,7 @@ import com.example.myapplication.engine.VideoExporter
 import com.example.myapplication.engine.drawComposition
 import com.example.myapplication.engine.drawShape
 import com.example.myapplication.engine.pickLayer
+import com.example.myapplication.engine.footageToScreen
 import com.example.myapplication.ui.components.ActionButton
 import com.example.myapplication.ui.components.ModelPreview
 import com.example.myapplication.ui.components.Panel
@@ -228,7 +238,7 @@ private fun EditorPanel.short(): String = when (this) {
     EditorPanel.Text -> "Teks"
     EditorPanel.Shape -> "Bentuk"
     EditorPanel.Model -> "Model"
-    EditorPanel.Tracker -> "Track 3D"
+    EditorPanel.Tracker -> "Tracking"
 }
 
 /** Panels that make sense for a layer type, in toolbar order. */
@@ -246,7 +256,7 @@ private fun panelsFor(type: LayerType): List<EditorPanel> = buildList {
         else -> Unit
     }
     add(EditorPanel.Color); add(EditorPanel.Blending)
-    if (type != LayerType.Gradient && type != LayerType.Camera) add(EditorPanel.Parent)
+    if (type != LayerType.Gradient) add(EditorPanel.Parent)
 }
 
 private fun importMessage(r: ModelImporter.Result): String =
@@ -672,7 +682,7 @@ private fun PanelContent(state: EditorState, layer: com.example.myapplication.en
         EditorPanel.Text -> if (layer.type == LayerType.Text) TextPanel(state, layer) else TransformPanel(state, layer)
         EditorPanel.Shape -> if (layer.type == LayerType.Shape) ShapePanel(state, layer) else TransformPanel(state, layer)
         EditorPanel.Model -> if (layer.type == LayerType.Model3D) ModelPanel(state, layer, importing, onImport) else TransformPanel(state, layer)
-        EditorPanel.Tracker -> CameraTrackingPanel(state,layer)
+        EditorPanel.Tracker -> TrackingPanel(state,layer)
     }
 }
 

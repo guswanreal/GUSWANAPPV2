@@ -163,6 +163,7 @@ object ProjectCodec {
         l.stabilize?.let { put("stabilize", JSONObject().put("smoothness", it.smoothness).put("crop", it.crop)
             .put("mRe", floats(it.mRe)).put("mIm", floats(it.mIm)).put("cRe", floats(it.cRe)).put("cIm", floats(it.cIm))) }
         l.cameraSolve?.let { put("cameraSolve", it.toJson()) }
+        l.faceSolve?.let { put("faceSolve", it.toJson()) }
     }
 
     private fun layer(o: JSONObject): Layer {
@@ -184,6 +185,7 @@ object ProjectCodec {
             tracked=o.optJSONObject("tracked")?.let { TrackPath(it.getJSONArray("x").floats(),it.getJSONArray("y").floats()) },
             stabilize=o.optJSONObject("stabilize")?.let { Stabilization(it.f("smoothness"),it.getJSONArray("mRe").floats(),it.getJSONArray("mIm").floats(),it.getJSONArray("cRe").floats(),it.getJSONArray("cIm").floats(),it.f("crop")) },
             is3D=o.optBoolean("is3D"), cameraSolve=o.optJSONObject("cameraSolve")?.let(CameraSolve3D::fromJson),
+            faceSolve=o.optJSONObject("faceSolve")?.let(FaceSolve3D::fromJson),
             spatialOffset=o.optJSONArray("spatialOffset")?.let { a -> List(a.length()) { a.getDouble(it).toFloat() }.also { require(it.isEmpty() || it.size==16) } }.orEmpty())
     }
 }

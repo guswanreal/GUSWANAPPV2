@@ -96,12 +96,12 @@ import com.example.myapplication.ui.theme.TextMid
 /** How a value is shown: like After Effects, transforms read in pixels, percent and revolutions. */
 internal class UiUnit(val toUi: (Float) -> Float, val fromUi: (Float) -> Float, val format: (Float) -> String)
 
-internal fun unitFor(key: PropKey, spec: FxParam): UiUnit = when (key) {
+internal fun unitFor(key: PropKey, spec: FxParam, width: Float = 1920f, height: Float = 1080f): UiUnit = when (key) {
     is PropKey.T -> when (key.prop) {
-        Prop.AnchorX -> UiUnit({ it * 960f }, { it / 960f }) { "%.1f".format(it) }
-        Prop.AnchorY -> UiUnit({ it * 540f }, { it / 540f }) { "%.1f".format(it) }
-        Prop.PosX -> UiUnit({ (it + 1f) * 960f }, { it / 960f - 1f }) { "%.1f".format(it) }
-        Prop.PosY -> UiUnit({ (it + 1f) * 540f }, { it / 540f - 1f }) { "%.1f".format(it) }
+        Prop.AnchorX -> UiUnit({ it * width/2 }, { it * 2/width }) { "%.1f".format(it) }
+        Prop.AnchorY -> UiUnit({ it * height/2 }, { it * 2/height }) { "%.1f".format(it) }
+        Prop.PosX -> UiUnit({ (it + 1f) * width/2 }, { it * 2/width - 1f }) { "%.1f".format(it) }
+        Prop.PosY -> UiUnit({ (it + 1f) * height/2 }, { it * 2/height - 1f }) { "%.1f".format(it) }
         Prop.Scale -> UiUnit({ it * 100f }, { it / 100f }) { "%.1f%%".format(it) }
         Prop.Rotation -> UiUnit({ it }, { it }) { v ->
             val rev = (v / 360f).toInt()
@@ -127,7 +127,7 @@ internal fun PropertyRow(state: EditorState, layer: Layer, key: PropKey, label: 
     val track = layer.trackOf(key) ?: return
     val name = label ?: spec.label
     val value = track.valueAt(state.time, layer.easing)
-    val unit = remember(key, spec) { unitFor(key, spec) }
+    val unit = remember(key, spec, state.settings) { unitFor(key, spec, state.settings.width.toFloat(), state.settings.height.toFloat()) }
     val keyHere = track.hasKeyAt(state.snap(state.time))
     val haptics = LocalHapticFeedback.current
     val tint = if (track.animated) Accent else Blue
@@ -212,7 +212,7 @@ internal fun ScrubValue(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    text.replace(',', '.').toFloatOrNull()?.let { change(unit.fromUi(it).coerceIn(range.start, range.endInclusive)) }
+                    text.replace(',', '.').toFloatOrNull()?.takeIf { it.isFinite() }?.let { change(unit.fromUi(it).coerceIn(range.start, range.endInclusive)) }
                     editing = false
                 }) { Text("Terapkan", color = Accent) }
             },

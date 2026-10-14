@@ -37,6 +37,7 @@ android {
 }
 
 dependencies {
+    implementation("com.google.mlkit:face-detection:16.1.7")
     implementation(libs.opencv)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)

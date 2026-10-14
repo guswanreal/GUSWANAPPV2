@@ -115,7 +115,7 @@ internal fun TransformPanel(state: EditorState, layer: Layer) {
             },
         ) {
             // The engine's list per layer type, so the panel matches what the renderer and keyframes use.
-            if (layer.supports3D()) {
+            if (layer.supports3D() && layer.type != LayerType.Camera) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("Mode 3D", color = TextHigh, modifier = Modifier.weight(1f))
                     androidx.compose.material3.Switch(checked = layer.is3D, onCheckedChange = { enabled ->
@@ -125,6 +125,10 @@ internal fun TransformPanel(state: EditorState, layer: Layer) {
                 if (layer.is3D) PanelHint("Putar bidang pada sumbu X/Y, atur kedalaman Z, lalu gerakkan layer Kamera.")
             }
             layer.transformProperties().forEach { PropertyRow(state, layer, PropKey.T(it)) }
+            if(layer.type==LayerType.Camera) {
+                PanelHint("Hubungkan kamera ke Null 3D melalui Parent untuk menggerakkan seluruh rig. Zoom tetap dikendalikan oleh kamera.")
+                ActionButton("Buat Null pengendali kamera",state::createCameraRig,primary=false)
+            }
             if (layer.type == LayerType.Model3D) PanelHint("Rotation pada layer 3D memutar model di sumbu Y.")
         }
         Panel(Modifier.fillMaxWidth()) {
@@ -297,7 +301,7 @@ internal fun ChoiceChip(text: String, selected: Boolean, onClick: () -> Unit) {
         style = MaterialTheme.typography.labelMedium,
         color = if (selected) TextHigh else TextMid,
         modifier = Modifier
-            .heightIn(min = 40.dp)
+            .heightIn(min = 44.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(bg)
             .border(1.dp, border, RoundedCornerShape(10.dp))
@@ -327,7 +331,7 @@ internal fun ParentPanel(state: EditorState, layer: Layer) {
     Panel(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(vertical = 6.dp)) {
             PanelHint("Child mengikuti Position, Anchor, Rotation, dan Scale parent. Tampilan pada playhead tetap saat mengganti atau melepas parent.")
-            PanelHint("Gunakan Null Object untuk menggerakkan beberapa layer bersama.")
+            PanelHint(if(layer.type==LayerType.Camera) "Kamera dapat dihubungkan ke Null. Position, Rotation dan Scale Null menggerakkan rig kamera 3D." else "Gunakan Null Object untuk menggerakkan beberapa layer bersama.")
             state.parentError?.let { Text(it, color = Danger, modifier = Modifier.padding(12.dp)) }
             ParentRow(null, "Tidak ada", Icons.Rounded.LinkOff, null, layer.parentId == null) { state.setParent(null) }
             state.parentCandidates().forEach { p ->

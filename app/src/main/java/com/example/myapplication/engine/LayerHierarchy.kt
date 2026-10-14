@@ -115,7 +115,8 @@ fun canParentLayer(layers: List<Layer>, childId: Int, parentId: Int?): Boolean {
     val byId = layers.associateBy { it.id }
     val child = byId[childId] ?: return false
     if (parentId == null) return true
-    if (child.type == LayerType.Gradient || child.type == LayerType.Camera) return false
+    if (child.type == LayerType.Gradient) return false
+    if (child.type == LayerType.Camera && byId[parentId]?.type != LayerType.Null) return false
     val seen = hashSetOf(childId)
     var next: Int? = parentId
     while (next != null) {
@@ -141,7 +142,7 @@ fun reparentLayer(
     val child = byId.getValue(childId)
     if (child.parentId == parentId) return child
     val parent = parentId?.let(byId::get)
-    if (child.is3D || parent?.is3D == true) {
+    if (child.type == LayerType.Camera || child.is3D || parent?.is3D == true) {
         require(child.supports3D()) { "Layer ini belum mendukung parenting 3D." }
         return if (keepWorld) Scene3D(layers,time,size).reparent(child,parent)
         else child.copy(parentId=parentId, parentOffset=ParentOffset(), spatialOffset=emptyList(), is3D=true)

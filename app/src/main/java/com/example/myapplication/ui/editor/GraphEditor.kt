@@ -52,6 +52,9 @@ import com.example.myapplication.engine.Easing
 import com.example.myapplication.engine.Layer
 import com.example.myapplication.engine.PropKey
 import com.example.myapplication.engine.Track
+import com.example.myapplication.engine.velocityAt
+import com.example.myapplication.engine.segmentHandles
+import com.example.myapplication.engine.Handle
 import com.example.myapplication.ui.components.ActionButton
 import com.example.myapplication.ui.components.Panel
 import com.example.myapplication.ui.components.ToolButton
@@ -90,6 +93,7 @@ internal fun GraphEditorPanel(state: EditorState, layer: Layer, onOpenTransform:
     val track = layer.trackOf(key) ?: return
     val spec = layer.specOf(key) ?: return
     var speedMode by remember { mutableStateOf(false) }
+    var fitKeys by remember { mutableStateOf(true) }
     val selectedIndex = state.graphKeyIndex?.takeIf { it in track.keys.indices }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -101,12 +105,14 @@ internal fun GraphEditorPanel(state: EditorState, layer: Layer, onOpenTransform:
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ChoiceChip("Value Graph", !speedMode) { speedMode = false }
             ChoiceChip("Speed Graph", speedMode) { speedMode = true }
+            ChoiceChip(if(fitKeys) "Fit keys" else "Full comp",fitKeys) { fitKeys=!fitKeys }
         }
-        GraphCanvas(state, layer, key, track, speedMode)
+        GraphCanvas(state, layer, key, track, speedMode, fitKeys)
+        CurveControls(state,layer,key,track,selectedIndex)
 
         Panel(Modifier.fillMaxWidth()) {
             Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                val unit = unitFor(key, spec)
+                val unit = unitFor(key, spec,state.settings.width.toFloat(),state.settings.height.toFloat())
                 if (selectedIndex != null) {
                     val k = track.keys[selectedIndex]
                     Column(Modifier.weight(1f)) {
@@ -152,36 +158,46 @@ private val PadTop = 16.dp
 private val PadBottom = 24.dp
 
 @Composable
-private fun GraphCanvas(state: EditorState, layer: Layer, key: PropKey, track: Track, speedMode: Boolean) {
+private fun GraphCanvas(state: EditorState, layer: Layer, key: PropKey, track: Track, speedMode: Boolean, fitKeys: Boolean) {
     val spec = layer.specOf(key) ?: return
-    val unit = remember(key, spec) { unitFor(key, spec) }
+    val unit = remember(key, spec, state.settings) { unitFor(key, spec,state.settings.width.toFloat(),state.settings.height.toFloat()) }
     val measurer = rememberTextMeasurer()
     val haptics = LocalHapticFeedback.current
     val duration = state.duration
+    val timeStart=if(fitKeys && track.keys.size>1) (track.keys.first().time-.08f*(track.keys.last().time-track.keys.first().time)).coerceAtLeast(0f) else 0f
+    val timeEnd=if(fitKeys && track.keys.size>1) (track.keys.last().time+.08f*(track.keys.last().time-track.keys.first().time)).coerceAtMost(duration) else duration
+    val timeSpan=(timeEnd-timeStart).coerceAtLeast(state.frame)
     val easing = layer.easing
     // Scale factor from model units to displayed units, for speed in px/s, %/s or °/s.
     val uiPerUnit = abs(unit.toUi(1f) - unit.toUi(0f)).takeIf { it > 0f } ?: 1f
 
-    val valueRange = remember(track, easing) {
+    val valueRange = remember(track, easing, timeStart, timeEnd) {
         var lo = Float.MAX_VALUE; var hi = -Float.MAX_VALUE
-        for (i in 0..120) { val v = track.valueAt(duration * i / 120f, easing); lo = min(lo, v); hi = max(hi, v) }
+        for (i in 0..120) { val v = track.valueAt(timeStart+timeSpan*i/120f, easing); lo = min(lo, v); hi = max(hi, v) }
         track.keys.forEach { lo = min(lo, it.value); hi = max(hi, it.value) }
         if (hi - lo < 1e-4f) { val pad = max(abs(hi) * 0.2f, (spec.max - spec.min) * 0.05f); lo -= pad; hi += pad }
         val pad = (hi - lo) * 0.14f
         (lo - pad)..(hi + pad)
     }
-    val speedMax = remember(track, easing) {
-        var m = 0f
-        for (i in 0..240) m = max(m, speedAt(track, duration * i / 240f, easing) * uiPerUnit)
-        max(m * 1.15f, 1e-3f)
+    val speedRange = remember(track, easing, timeStart, timeEnd) {
+        var lo=0f; var hi=0f
+        for (i in 0..240) {
+            val v=track.velocityAt(timeStart+timeSpan*i/240f,easing)*uiPerUnit
+            lo=min(lo,v); hi=max(hi,v)
+        }
+        val pad=max((hi-lo)*.16f,1e-3f)
+        (lo-pad)..(hi+pad)
     }
     var frozen by remember { mutableStateOf<ClosedFloatingPointRange<Float>?>(null) }
-    val range = frozen ?: valueRange
+    val range = frozen ?: if(speedMode) speedRange else valueRange
 
     val s by rememberUpdatedState(state)
     val tr by rememberUpdatedState(track)
     val r by rememberUpdatedState(range)
     val mode by rememberUpdatedState(speedMode)
+    val start by rememberUpdatedState(timeStart)
+    val spanTime by rememberUpdatedState(timeSpan)
+    val currentEasing by rememberUpdatedState(easing)
 
     Canvas(
         Modifier
@@ -191,31 +207,54 @@ private fun GraphCanvas(state: EditorState, layer: Layer, key: PropKey, track: T
             .background(Ink950)
             .border(1.dp, Line, RoundedCornerShape(12.dp))
             .semantics { contentDescription = "Graph editor ${spec.label}. Seret kotak key untuk memindahkannya, seret area kosong untuk memindah playhead." }
-            .pointerInput(key) {
+            .pointerInput(key, speedMode, fitKeys) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
                     val left = PadLeft.toPx(); val right = size.width - PadRight.toPx()
                     val top = PadTop.toPx(); val bottom = size.height - PadBottom.toPx()
                     val w = right - left; val h = bottom - top
                     val span = (r.endInclusive - r.start).takeIf { it > 0f } ?: 1f
-                    fun xOf(t: Float) = left + t / duration * w
-                    fun tOf(x: Float) = ((x - left) / w * duration).coerceIn(0f, duration)
+                    fun xOf(t: Float) = left + (t-start) / spanTime * w
+                    fun tOf(x: Float) = (start+(x-left)/w*spanTime).coerceIn(0f,duration)
                     fun yOf(v: Float) = top + (1f - (v - r.start) / span) * h
                     fun vOf(y: Float) = r.start + (1f - (y - top) / h) * span
-                    val hit = if (mode) null else tr.keys.indices.minByOrNull { i ->
-                        hypot(xOf(tr.keys[i].time) - down.position.x, yOf(tr.keys[i].value) - down.position.y)
-                    }?.takeIf { i -> hypot(xOf(tr.keys[i].time) - down.position.x, yOf(tr.keys[i].value) - down.position.y) < 30.dp.toPx() }
-                    if (hit != null) {
+                    val segment=s.graphKeyIndex?.coerceAtMost(tr.keys.lastIndex-1)?.takeIf { it>=0 }
+                    val a=segment?.let { tr.keys[it] }; val b=segment?.let { tr.keys[it+1] }
+                    val pair=if(a!=null && b!=null) segmentHandles(a,b,a.easing ?: currentEasing) else null
+                    fun handlePoint(out:Boolean):Offset {
+                        val k=if(out) a!! else b!!; val h0=if(out) pair!!.first else pair!!.second
+                        val dt=b!!.time-a!!.time
+                        return Offset(xOf(k.time+(if(out) 1 else -1)*h0.influence*dt),
+                            yOf(if(mode) h0.speed*uiPerUnit else k.value+(if(out) 1 else -1)*h0.speed*h0.influence*dt))
+                    }
+                    val handle=if(pair!=null) listOf(true,false).minByOrNull { (handlePoint(it)-down.position).getDistance() }
+                        ?.takeIf { (handlePoint(it)-down.position).getDistance()<24.dp.toPx() } else null
+                    fun keyValue(i:Int)=if(mode) tr.velocityAt(tr.keys[i].time,currentEasing)*uiPerUnit else tr.keys[i].value
+                    val hit=tr.keys.indices.minByOrNull { hypot(xOf(tr.keys[it].time)-down.position.x,yOf(keyValue(it))-down.position.y) }
+                        ?.takeIf { hypot(xOf(tr.keys[it].time)-down.position.x,yOf(keyValue(it))-down.position.y)<24.dp.toPx() }
+                    if(handle!=null && segment!=null && a!=null && b!=null) {
+                        down.consume(); s.playing=false; frozen=r
+                        val grab=down.position-handlePoint(handle)
+                        drag(down.id) { ch ->
+                            ch.consume(); val p=ch.position-grab
+                            val k=if(handle) a else b
+                            val influence=((tOf(p.x)-k.time)*(if(handle) 1 else -1)/(b.time-a.time)).coerceIn(.001f,1f)
+                            val speed=if(mode) vOf(p.y)/uiPerUnit else (vOf(p.y)-k.value)*(if(handle) 1 else -1)/(influence*(b.time-a.time))
+                            s.setBezierHandle(key,segment,handle,influence,speed)
+                        }
+                        frozen=null
+                    } else if (hit != null) {
                         down.consume()
+                        s.playing=false
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         s.graphKeyIndex = hit
                         frozen = r
                         val k0 = tr.keys[hit]
-                        val grab = down.position - Offset(xOf(k0.time), yOf(k0.value))
+                        val grab = down.position - Offset(xOf(k0.time), yOf(keyValue(hit)))
                         drag(down.id) { ch ->
                             ch.consume()
                             val p = ch.position - grab
-                            s.moveKey(key, hit, tOf(p.x), vOf(p.y).coerceIn(spec.min, spec.max))
+                            s.moveKey(key, hit, tOf(p.x), if(mode) k0.value else vOf(p.y))
                         }
                         frozen = null
                     } else {
@@ -230,14 +269,14 @@ private fun GraphCanvas(state: EditorState, layer: Layer, key: PropKey, track: T
         val left = PadLeft.toPx(); val right = size.width - PadRight.toPx()
         val top = PadTop.toPx(); val bottom = size.height - PadBottom.toPx()
         val w = right - left; val h = bottom - top
-        fun xOf(t: Float) = left + t / duration * w
-        val lo = if (speedMode) 0f else range.start
-        val hi = if (speedMode) speedMax else range.endInclusive
+        fun xOf(t: Float) = left + (t-timeStart) / timeSpan * w
+        val lo = range.start
+        val hi = range.endInclusive
         fun yOf(v: Float) = top + (1f - (v - lo) / (hi - lo)) * h
 
         // Outside the layer's in/out points.
-        drawRect(Color.Black.copy(alpha = 0.35f), Offset(left, top), Size(xOf(layer.start) - left, h))
-        drawRect(Color.Black.copy(alpha = 0.35f), Offset(xOf(layer.end), top), Size(right - xOf(layer.end), h))
+        drawRect(Color.Black.copy(alpha = 0.35f), Offset(left, top), Size((xOf(layer.start) - left).coerceIn(0f,w), h))
+        drawRect(Color.Black.copy(alpha = 0.35f), Offset(xOf(layer.end).coerceIn(left,right), top), Size((right - xOf(layer.end)).coerceIn(0f,w), h))
 
         val label = MonoLabel.copy(color = TextLow)
         for (i in 0..4) {
@@ -248,11 +287,11 @@ private fun GraphCanvas(state: EditorState, layer: Layer, key: PropKey, track: T
             val layout = measurer.measure(text.take(9), label)
             drawText(layout, topLeft = Offset(4.dp.toPx(), y - layout.size.height / 2f))
         }
-        val step = if (w / duration < 28.dp.toPx()) 2 else 1
-        for (sec in 0..duration.toInt() step step) {
-            val x = xOf(sec.toFloat())
+        for (i in 0..4) {
+            val sec=timeStart+timeSpan*i/4f
+            val x = xOf(sec)
             drawLine(Line, Offset(x, top), Offset(x, bottom), 1f)
-            val layout = measurer.measure("${sec}s", label)
+            val layout = measurer.measure("%.1fs".format(sec), label)
             drawText(layout, topLeft = Offset(x - layout.size.width / 2f, bottom + 4.dp.toPx()))
         }
 
@@ -260,8 +299,8 @@ private fun GraphCanvas(state: EditorState, layer: Layer, key: PropKey, track: T
         val fill = Path()
         val samples = 220
         for (i in 0..samples) {
-            val t = duration * i / samples
-            val v = if (speedMode) speedAt(track, t, easing) * uiPerUnit else track.valueAt(t, easing)
+            val t = timeStart+timeSpan * i / samples
+            val v = if (speedMode) track.velocityAt(t, easing) * uiPerUnit else track.valueAt(t, easing)
             val p = Offset(xOf(t), yOf(v).coerceIn(top - 40f, bottom + 40f))
             if (i == 0) { curve.moveTo(p.x, p.y); fill.moveTo(p.x, bottom); fill.lineTo(p.x, p.y) } else { curve.lineTo(p.x, p.y); fill.lineTo(p.x, p.y) }
         }
@@ -270,9 +309,25 @@ private fun GraphCanvas(state: EditorState, layer: Layer, key: PropKey, track: T
         drawPath(fill, Brush.verticalGradient(listOf(color.copy(alpha = 0.22f), Color.Transparent), startY = top, endY = bottom))
         drawPath(curve, color, style = Stroke(2.dp.toPx()))
 
+        val segment=state.graphKeyIndex?.coerceAtMost(track.keys.lastIndex-1)?.takeIf { it>=0 }
+        if(segment!=null) {
+            val a=track.keys[segment]; val b=track.keys[segment+1]
+            segmentHandles(a,b,a.easing ?: easing)?.let { (out,incoming) ->
+                listOf(Triple(a,out,true),Triple(b,incoming,false)).forEach { (k,handle,outgoing) ->
+                    val direction=if(outgoing) 1 else -1
+                    val anchor=Offset(xOf(k.time),yOf(if(speedMode) track.velocityAt(k.time,easing)*uiPerUnit else k.value))
+                    val control=Offset(xOf(k.time+direction*handle.influence*(b.time-a.time)),
+                        yOf(if(speedMode) handle.speed*uiPerUnit else k.value+direction*handle.speed*handle.influence*(b.time-a.time)))
+                    drawLine(Accent,anchor,control,1.5.dp.toPx())
+                    drawCircle(Ink950,6.dp.toPx(),control)
+                    drawCircle(Accent,6.dp.toPx(),control,style=Stroke(2.dp.toPx()))
+                }
+            }
+        }
+
         val ks = 5.dp.toPx()
         track.keys.forEachIndexed { i, k ->
-            val v = if (speedMode) speedAt(track, k.time, easing) * uiPerUnit else k.value
+            val v = if (speedMode) track.velocityAt(k.time, easing) * uiPerUnit else k.value
             val c = Offset(xOf(k.time), yOf(v))
             val sel = i == state.graphKeyIndex
             if (sel) drawCircle(Accent.copy(alpha = 0.25f), ks * 2.6f, c)
@@ -287,7 +342,3 @@ private fun GraphCanvas(state: EditorState, layer: Layer, key: PropKey, track: T
     }
 }
 
-private fun speedAt(track: Track, t: Float, easing: Easing): Float {
-    val d = 1f / 120f
-    return abs(track.valueAt(t + d, easing) - track.valueAt(t - d, easing)) / (2 * d)
-}
