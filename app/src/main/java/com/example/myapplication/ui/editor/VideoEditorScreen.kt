@@ -593,6 +593,7 @@ private fun PreviewStage(state: EditorState, modifier: Modifier) {
                     }
                 }
         ) {
+            if(size.width<=0f || size.height<=0f) return@Canvas
             // Frames snap to the project's rate, so a 24 fps project previews exactly like its export.
             drawComposition(state.layers, state.snap(state.time), measurer, state.selectedId.takeIf { !state.playing }, background = state.settings.background,fps=state.fps)
             selected?.takeIf { !state.playing && it.type==LayerType.Video && it.faceSolve!=null }?.let { video ->

@@ -74,6 +74,7 @@ fun DrawScope.drawComposition(
     frames: FrameSource = FootageFrames,
     fps: Int = FPS,
 ) {
+    if(!size.width.isFinite() || !size.height.isFinite() || size.width<=0f || size.height<=0f) return
     drawRect(background)
     // Reading the frame cache's version makes the preview redraw when a proxy frame arrives.
     if (frames === FootageFrames && layers.any { it.footage != null }) FootageFrames.version

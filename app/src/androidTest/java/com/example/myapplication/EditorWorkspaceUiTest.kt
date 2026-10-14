@@ -18,6 +18,7 @@ import org.junit.runner.RunWith
 import java.io.File
 
 @RunWith(AndroidJUnit4::class)
+@OptIn(ExperimentalTestApi::class)
 class EditorWorkspaceUiTest {
     @get:Rule val compose=createComposeRule()
     private val context get()=InstrumentationRegistry.getInstrumentation().targetContext
@@ -85,7 +86,8 @@ class EditorWorkspaceUiTest {
         compose.onNodeWithTag("scrub-Position X").performScrollTo().performClick()
         android.util.Log.i("EditorUiQa","Numeric dialog opened")
         compose.mainClock.advanceTimeBy(1000)
-        compose.onNode(hasSetTextAction()).performClick().performTextReplacement("NaN").assertIsDisplayed()
+        compose.onNode(hasSetTextAction()).performClick().performTextReplacement("NaN")
+        compose.onNode(hasSetTextAction()).assertIsDisplayed()
         compose.onNodeWithText("Masukkan angka yang valid.").assertIsDisplayed()
         compose.onNodeWithText("Terapkan").assertIsNotEnabled()
         compose.onNodeWithText("Batal").performClick()
