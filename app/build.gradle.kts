@@ -15,6 +15,7 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "1.0"
+        manifestPlaceholders["appLabel"] = "@string/app_name"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -24,7 +25,7 @@ android {
             if (providers.gradleProperty("cloudPreview").orNull == "true") {
                 applicationIdSuffix = ".preview"
                 versionNameSuffix = "-cloud-preview"
-                resValue("string", "app_name", "Guswaneditor Preview")
+                manifestPlaceholders["appLabel"] = "Guswaneditor Preview"
             }
         }
         release {
